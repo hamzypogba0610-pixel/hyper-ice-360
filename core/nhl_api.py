@@ -18,30 +18,27 @@ NHL_TEAMS = {
 def get_team_real_stats(team_code):
     """
     Va chercher les stats réelles de l'équipe sur l'API de la NHL.
-    On utilise une API publique et gratuite.
+    Renvoie l'attaque (buts marqués) et la défense (buts encaissés).
     """
     try:
-        # On appelle l'API des classements de la NHL
         url = "https://api-web.nhle.com/v1/standings/now"
         response = requests.get(url, timeout=10)
         data = response.json()
         
-        # On cherche notre équipe dans la liste
         for team in data.get("standings", []):
             if team.get("teamAbbrev", {}).get("default") == team_code:
-                # On calcule une approximation des buts attendus (xG) basée sur les buts marqués/encaissés
-                # (Formule simplifiée pour le prototype)
-                buts_marques = team.get("goalFor", 0)
                 matchs_joues = team.get("gamesPlayed", 1)
+                buts_marques = team.get("goalFor", 0)
                 buts_encaisses = team.get("goalAgainst", 0)
                 
-                xg_moyen = buts_marques / matchs_joues if matchs_joues > 0 else 3.0
-                xga_moyen = buts_encaisses / matchs_joues if matchs_joues > 0 else 3.0
+                # Calcul des moyennes par match
+                attaque = buts_marques / matchs_joues if matchs_joues > 0 else 3.0
+                defense = buts_encaisses / matchs_joues if matchs_joues > 0 else 3.0
                 
                 return {
                     "nom": team.get("teamName", {}).get("default", team_code),
-                    "xg": round(xg_moyen, 2),
-                    "xga": round(xga_moyen, 2),
+                    "attaque": round(attaque, 2),
+                    "defense": round(defense, 2),
                     "matchs": matchs_joues
                 }
     except Exception as e:
