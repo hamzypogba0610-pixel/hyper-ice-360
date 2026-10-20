@@ -1,6 +1,6 @@
 import streamlit as st
 from core.leagues import LEAGUES, list_markets, compute_points
-from core.math_engine import calculate_1x2_proba
+from core.math_engine import calculate_all_markets
 import datetime
 
 # --- CONFIGURATION DE LA PAGE ---
@@ -33,7 +33,6 @@ st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des ri
 
 # --- FORMULAIRE PRINCIPAL ---
 with st.container():
-    # Ligne 1 : Ligue et Date
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         ligue_id = st.selectbox("🏆 Compétition", list(LEAGUES.keys()))
@@ -46,125 +45,115 @@ with st.container():
 
     st.divider()
 
-    # Ligne 2 : Les Équipes
     st.subheader("⚔️ Confrontation")
     col_dom, col_ext = st.columns(2)
-    
     with col_dom:
         st.markdown("### 🏠 Domicile")
         equipe_dom = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Maple Leafs", key="nom_dom")
-        
     with col_ext:
         st.markdown("### ✈️ Extérieur")
         equipe_ext = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Canadiens", key="nom_ext")
 
     st.divider()
 
-    # Ligne 3 : Statistiques (xG)
-    st.subheader("📊 Statistiques Avancées")
+    st.subheader("📊 Statistiques (xG)")
     col_stat_dom, col_stat_ext = st.columns(2)
-    
     with col_stat_dom:
-        st.caption(f"Stats de l'équipe Domicile")
-        xg_dom = st.number_input("xG (Buts attendus)", value=None, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
-        
+        xg_dom = st.number_input("xG Domicile", value=None, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
     with col_stat_ext:
-        st.caption(f"Stats de l'équipe Extérieur")
-        xg_ext = st.number_input("xG (Buts attendus)", value=None, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
+        xg_ext = st.number_input("xG Extérieur", value=None, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
 
     st.divider()
 
-    # Ligne 4 : Les Cotes du Bookmaker
     st.subheader("💰 Cotes du Bookmaker (Optionnel)")
     st.caption("Rentre les cotes pour voir si le modèle détecte une 'Value'.")
-    col_cote1, col_cote2, col_cote3 = st.columns(3)
-    with col_cote1:
-        cote_dom = st.number_input(f"Cote Victoire {equipe_dom if equipe_dom else 'Dom'}", min_value=1.01, value=None, step=0.01, key="cote_dom", placeholder="Ex: 2.10")
-    with col_cote2:
-        cote_nul = st.number_input("Cote Match Nul", min_value=1.01, value=None, step=0.01, key="cote_nul", placeholder="Ex: 4.20")
-    with col_cote3:
-        cote_ext = st.number_input(f"Cote Victoire {equipe_ext if equipe_ext else 'Ext'}", min_value=1.01, value=None, step=0.01, key="cote_ext", placeholder="Ex: 3.50")
+    
+    # Ligne 1X2
+    c1, c2, c3 = st.columns(3)
+    cote_dom = c1.number_input(f"Cote 1 (Dom)", min_value=1.01, value=None, step=0.01, key="cote_dom", placeholder="Ex: 2.10")
+    cote_nul = c2.number_input("Cote X (Nul)", min_value=1.01, value=None, step=0.01, key="cote_nul", placeholder="Ex: 4.20")
+    cote_ext = c3.number_input(f"Cote 2 (Ext)", min_value=1.01, value=None, step=0.01, key="cote_ext", placeholder="Ex: 3.50")
+    
+    # Ligne Over/Under & BTTS
+    c4, c5, c6 = st.columns(3)
+    cote_over = c4.number_input("Cote + de 5.5 buts", min_value=1.01, value=None, step=0.01, key="cote_over", placeholder="Ex: 1.90")
+    cote_under = c5.number_input("Cote - de 5.5 buts", min_value=1.01, value=None, step=0.01, key="cote_under", placeholder="Ex: 1.90")
+    cote_btts = c6.number_input("Cote Les 2 marquent (Oui)", min_value=1.01, value=None, step=0.01, key="cote_btts", placeholder="Ex: 1.75")
 
     st.divider()
 
-    # Bouton d'action principal
     if st.button("LANCER L'ANALYSE 🚀"):
-        
         nom_dom = equipe_dom if equipe_dom else "Équipe Domicile"
         nom_ext = equipe_ext if equipe_ext else "Équipe Extérieur"
-
-        # --- 1. CALCUL DES PROBABILITÉS (MOTEUR) ---
-        st.subheader(f"🎯 Probabilités du Modèle (1X2 à 60 min)")
         
         lam_dom = xg_dom if xg_dom is not None else 3.0
         lam_ext = xg_ext if xg_ext is not None else 2.7
         
-        st.write(f"*Basé sur des buts attendus (xG) de **{lam_dom}** pour {nom_dom} et **{lam_ext}** pour {nom_ext}.*")
+        # Appel du cerveau (qui renvoie maintenant un dictionnaire)
+        probs = calculate_all_markets(lam_dom, lam_ext)
         
-        p_dom, p_nul, p_ext = calculate_1x2_proba(lam_dom, lam_ext)
+        p_dom, p_nul, p_ext = probs["1X2"]
+
+        st.subheader("🎯 Probabilités du Modèle")
+        st.write(f"*Basé sur xG : {nom_dom} = {lam_dom} | {nom_ext} = {lam_ext}*")
         
+        # Affichage des probas
         prob1, prob2, prob3 = st.columns(3)
         prob1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
         prob2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
         prob3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
+        
+        prob4, prob5, prob6 = st.columns(3)
+        prob4.metric(label="+ de 5.5 buts", value=f"{probs['over_5_5']*100:.1f} %")
+        prob5.metric(label="- de 5.5 buts", value=f"{probs['under_5_5']*100:.1f} %")
+        prob6.metric(label="Les 2 marquent (Oui)", value=f"{probs['btts_yes']*100:.1f} %")
 
         st.divider()
 
-        # --- 2. DETECTION DE VALEUR (EV & KELLY) ---
-        if cote_dom or cote_nul or cote_ext:
+        # --- DETECTION DE VALEUR ---
+        if any([cote_dom, cote_nul, cote_ext, cote_over, cote_under, cote_btts]):
             st.subheader("💎 Analyse de la Valeur (Value Bet)")
             
-            # Fonction pour calculer l'EV et le Kelly
             def calculer_valeur(proba, cote, nom_pari):
                 if cote is None or cote <= 1.0:
                     return
-                
-                # EV = (Probabilité * Cote) - 1
                 ev = (proba * cote) - 1
-                
-                # Kelly fractionnaire (on utilise 0.25 pour être prudent)
                 kelly = ((proba * cote) - 1) / (cote - 1)
-                mise_conseillee = max(0.0, kelly * 0.25) * 100 # en % de la bankroll
+                mise = max(0.0, kelly * 0.25) * 100
                 
                 if ev > 0:
-                    st.success(f"✅ **{nom_pari}** : Valeur détectée ! (EV: +{ev*100:.1f}%)")
-                    if mise_conseillee > 0.5:
-                        st.info(f"👉 Mise conseillée (Kelly 1/4) : **{mise_conseillee:.1f}%** de ta bankroll.")
+                    st.success(f"✅ **{nom_pari}** : Valeur ! (EV: +{ev*100:.1f}%) | Mise: {mise:.1f}% bankroll")
                 else:
                     st.error(f"❌ **{nom_pari}** : Pas de valeur. (EV: {ev*100:.1f}%)")
 
-            if cote_dom:
-                calculer_valeur(p_dom, cote_dom, f"Victoire {nom_dom}")
-            if cote_nul:
-                calculer_valeur(p_nul, cote_nul, "Match Nul")
-            if cote_ext:
-                calculer_valeur(p_ext, cote_ext, f"Victoire {nom_ext}")
+            calculer_valeur(p_dom, cote_dom, f"Victoire {nom_dom}")
+            calculer_valeur(p_nul, cote_nul, "Match Nul")
+            calculer_valeur(p_ext, cote_ext, f"Victoire {nom_ext}")
+            calculer_valeur(probs['over_5_5'], cote_over, "+ de 5.5 buts")
+            calculer_valeur(probs['under_5_5'], cote_under, "- de 5.5 buts")
+            calculer_valeur(probs['btts_yes'], cote_btts, "Les 2 marquent (Oui)")
 
     st.divider()
 
-    # --- 3. SIMULATEUR DE POINTS (Optionnel) ---
-    with st.expander("🧮 Outil : Simulateur de points au classement (Optionnel)"):
-        # ... (le code du simulateur reste le même)
-        st.caption("Remplis un score pour vérifier comment les points sont attribués dans cette ligue.")
+    with st.expander("🧮 Outil : Simulateur de points (Optionnel)"):
         col_sim1, col_sim2 = st.columns(2)
         with col_sim1:
-            score_dom_60 = st.number_input("Buts Dom (60 min)", min_value=0, value=None, key="sim_dom_60", placeholder="0")
-            score_dom_fin = st.number_input("Buts Dom (Final)", min_value=0, value=None, key="sim_dom_fin", placeholder="0")
+            s_dom_60 = st.number_input("Buts Dom (60 min)", min_value=0, value=None, key="s_dom_60", placeholder="0")
+            s_dom_fin = st.number_input("Buts Dom (Final)", min_value=0, value=None, key="s_dom_fin", placeholder="0")
         with col_sim2:
-            score_ext_60 = st.number_input("Buts Ext (60 min)", min_value=0, value=None, key="sim_ext_60", placeholder="0")
-            score_ext_fin = st.number_input("Buts Ext (Final)", min_value=0, value=None, key="sim_ext_fin", placeholder="0")
+            s_ext_60 = st.number_input("Buts Ext (60 min)", min_value=0, value=None, key="s_ext_60", placeholder="0")
+            s_ext_fin = st.number_input("Buts Ext (Final)", min_value=0, value=None, key="s_ext_fin", placeholder="0")
             
         if st.button("Calculer les points"):
-            v_dom_60 = score_dom_60 if score_dom_60 is not None else 0
-            v_dom_fin = score_dom_fin if score_dom_fin is not None else 0
-            v_ext_60 = score_ext_60 if score_ext_60 is not None else 0
-            v_ext_fin = score_ext_fin if score_ext_fin is not None else 0
-
+            v_dom_60 = s_dom_60 or 0
+            v_dom_fin = s_dom_fin or 0
+            v_ext_60 = s_ext_60 or 0
+            v_ext_fin = s_ext_fin or 0
             try:
                 pts_dom, pts_ext = compute_points(ligue_id, v_dom_60, v_ext_60, v_dom_fin, v_ext_fin)
                 st.success(f"**Points : Domicile {pts_dom} | Extérieur {pts_ext}**")
             except Exception as e:
                 if "égalité" in str(e):
-                    st.warning("⚠️ Un match de hockey ne peut pas se finir sur un match nul. Ajoute un but en prolongation ou aux tirs au but.")
+                    st.warning("⚠️ Un match ne peut pas finir sur un nul. Ajoute un but en OT/SO.")
                 else:
                     st.error(f"Erreur : {e}")
