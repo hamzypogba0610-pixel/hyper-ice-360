@@ -27,9 +27,9 @@ st.markdown("""
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
 
-# On initialise les choix d'équipes et la navigation
-if 'nav_choice' not in st.session_state: 
-    st.session_state.nav_choice = "🎯 Scanner Automatique"
+# Gestion de la navigation
+if 'current_page' not in st.session_state: 
+    st.session_state.current_page = "🎯 Scanner Automatique"
 if 'sel_dom' not in st.session_state: 
     st.session_state.sel_dom = list(NHL_TEAMS.keys())[0]
 if 'sel_ext' not in st.session_state: 
@@ -38,14 +38,19 @@ if 'sel_ext' not in st.session_state:
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- MENU DE NAVIGATION (Remplace les onglets) ---
+# --- MENU DE NAVIGATION SÉCURISÉ ---
+nav_options = ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"]
 navigation = st.radio(
     "Navigation",
-    ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"],
+    nav_options,
+    index=nav_options.index(st.session_state.current_page),
     horizontal=True,
-    key="nav_choice",
     label_visibility="collapsed"
 )
+
+# Si l'utilisateur clique manuellement sur le menu, on met à jour la mémoire
+if navigation != st.session_state.current_page:
+    st.session_state.current_page = navigation
 
 st.divider()
 
@@ -97,11 +102,16 @@ if navigation == "🎯 Scanner Automatique":
                                 cote_juste = 1 / p['proba']
                                 st.caption(f"Cote juste : {cote_juste:.2f}")
                             with colC:
-                                # LE BOUTON MAGIQUE QUI CHANGE DE PAGE
+                                # LE BOUTON QUI FORCE LA NAVIGATION
                                 if st.button("Analyser", key=f"btn_{p['match']}_{p['marche']}"):
+                                    # 1. On change les équipes en mémoire
                                     st.session_state.sel_dom = [k for k, v in NHL_TEAMS.items() if v == p["h_code"]][0]
                                     st.session_state.sel_ext = [k for k, v in NHL_TEAMS.items() if v == p["a_code"]][0]
-                                    st.session_state.nav_choice = "🔍 Analyse Manuelle"
+                                    
+                                    # 2. On force le changement de page
+                                    st.session_state.current_page = "🔍 Analyse Manuelle"
+                                    
+                                    # 3. On relance le site pour appliquer les changements
                                     st.rerun()
                             st.divider()
 
