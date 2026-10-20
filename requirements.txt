@@ -1,0 +1,29 @@
+# ============================================================
+# HYPER-ICE 360 — Dépendances V1
+# ============================================================
+# Versions figées pour garantir la reproductibilité.
+# Ne pas modifier sans relancer tous les tests.
+# ============================================================
+
+# --- Interface utilisateur ---
+streamlit==1.37.0
+
+# --- Calcul numérique ---
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+
+# --- Modèles statistiques (calibration logistique) ---
+scikit-learn==1.4.2
+
+# --- Requêtes HTTP (API hockey, cotes) ---
+requests==2.32.3
+
+# --- Base de données Turso ---
+libsql-client==0.3.1
+
+# --- Gestion des variables d'environnement (.env) ---
+python-dotenv==1.0.1
+
+# --- Tests ---
+pytest==8.2.2
