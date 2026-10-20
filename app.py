@@ -23,21 +23,36 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Mémoire
+# --- INITIALISATION DE LA MÉMOIRE ---
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
-if 'selected_match' not in st.session_state: st.session_state.selected_match = None
+
+# On initialise les choix d'équipes et la navigation
+if 'nav_choice' not in st.session_state: 
+    st.session_state.nav_choice = "🎯 Scanner Automatique"
+if 'sel_dom' not in st.session_state: 
+    st.session_state.sel_dom = list(NHL_TEAMS.keys())[0]
+if 'sel_ext' not in st.session_state: 
+    st.session_state.sel_ext = list(NHL_TEAMS.keys())[1]
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# 3 ONGLETS
-tab_scanner, tab_analyse, tab_historique = st.tabs(["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"])
+# --- MENU DE NAVIGATION (Remplace les onglets) ---
+navigation = st.radio(
+    "Navigation",
+    ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"],
+    horizontal=True,
+    key="nav_choice",
+    label_visibility="collapsed"
+)
+
+st.divider()
 
 # ==========================================
-# ONGLET 1 : SCANNER
+# PAGE 1 : SCANNER
 # ==========================================
-with tab_scanner:
+if navigation == "🎯 Scanner Automatique":
     st.subheader("🎯 Chasseur de Pépites")
     st.write("Le scanner analyse tous les matchs à venir et filtre selon tes critères.")
     
@@ -82,29 +97,22 @@ with tab_scanner:
                                 cote_juste = 1 / p['proba']
                                 st.caption(f"Cote juste : {cote_juste:.2f}")
                             with colC:
-                                # Bouton magique pour envoyer vers l'analyse
+                                # LE BOUTON MAGIQUE QUI CHANGE DE PAGE
                                 if st.button("Analyser", key=f"btn_{p['match']}_{p['marche']}"):
-                                    st.session_state.selected_match = {
-                                        "home": p["h_code"],
-                                        "away": p["a_code"],
-                                        "lam_h": p["lam_h"],
-                                        "lam_a": p["lam_a"]
-                                    }
-                                    st.success("Match sélectionné ! Va dans l'onglet 'Analyse Manuelle'.")
+                                    st.session_state.sel_dom = [k for k, v in NHL_TEAMS.items() if v == p["h_code"]][0]
+                                    st.session_state.sel_ext = [k for k, v in NHL_TEAMS.items() if v == p["a_code"]][0]
+                                    st.session_state.nav_choice = "🔍 Analyse Manuelle"
+                                    st.rerun()
                             st.divider()
 
 # ==========================================
-# ONGLET 2 : ANALYSE MANUELLE
+# PAGE 2 : ANALYSE MANUELLE
 # ==========================================
-with tab_analyse:
-    # Pré-remplissage si on vient du scanner
-    default_home = list(NHL_TEAMS.keys()).index([k for k, v in NHL_TEAMS.items() if v == st.session_state.selected_match["home"]][0]) if st.session_state.selected_match else 0
-    default_away = list(NHL_TEAMS.keys()).index([k for k, v in NHL_TEAMS.items() if v == st.session_state.selected_match["away"]][0]) if st.session_state.selected_match else 1
-
+elif navigation == "🔍 Analyse Manuelle":
     with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), index=default_home, key="sel_dom")
+            equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), key="sel_dom")
             stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
             if stats_dom:
                 st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
@@ -112,7 +120,7 @@ with tab_analyse:
                 forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
                 st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom]))
         with col2:
-            equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), index=default_away, key="sel_ext")
+            equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), key="sel_ext")
             stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
             if stats_ext:
                 st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
@@ -122,15 +130,13 @@ with tab_analyse:
 
         st.divider()
         
-        # Affichage des cotes
         st.subheader("💰 Cotes (Optionnel)")
         c1, c2, c3 = st.columns(3)
         cote_dom = c1.number_input("1 (Dom)", min_value=1.01, value=None, step=0.01)
         cote_nul = c2.number_input("X (Nul)", min_value=1.01, value=None, step=0.01)
         cote_ext = c3.number_input("2 (Ext)", min_value=1.01, value=None, step=0.01)
 
-        if st.button("LANCER L'ANALYSE DÉTAILLÉE 🚀"):
-            # Calculs
+        if st.button("LANCER L'ANALYSE DÉTAILLÉE 🚀", use_container_width=True):
             lam_dom = ((stats_dom['attaque'] + stats_ext['defense']) / 2) * 1.05
             lam_ext = ((stats_ext['attaque'] + stats_dom['defense']) / 2) * 0.95
             probs = calculate_all_markets(lam_dom, lam_ext)
@@ -138,20 +144,20 @@ with tab_analyse:
             st.subheader("🎯 Probabilités")
             st.caption(f"xG calculés : {equipe_dom} = {lam_dom:.2f} | {equipe_ext} = {lam_ext:.2f}")
             
-            # Matrice
             st.write("### 🎲 Matrice des Scores")
             matrix_data = get_goal_matrix(lam_dom, lam_ext)
             df_matrix = pd.DataFrame(matrix_data).style.format("{:.2f}")
             st.dataframe(df_matrix, use_container_width=True)
             
-            # Value Bet
             if cote_dom and (probs['1X2'][0] * cote_dom) - 1 > 0:
                 st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_dom} ! (Proba: {probs['1X2'][0]*100:.1f}%, Cote: {cote_dom})")
+            if cote_ext and (probs['1X2'][2] * cote_ext) - 1 > 0:
+                st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_ext} ! (Proba: {probs['1X2'][2]*100:.1f}%, Cote: {cote_ext})")
 
 # ==========================================
-# ONGLET 3 : HISTORIQUE & BANKROLL
+# PAGE 3 : HISTORIQUE & BANKROLL
 # ==========================================
-with tab_historique:
+elif navigation == "📜 Tracker & Bankroll":
     st.subheader("💰 Bankroll & Paris")
     st.metric("Bankroll Actuelle", f"{st.session_state.bankroll:.2f} €")
     
