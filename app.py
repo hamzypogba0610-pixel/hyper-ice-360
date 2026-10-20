@@ -1,6 +1,7 @@
 import streamlit as st
 from core.leagues import LEAGUES, list_markets, compute_points
 from core.math_engine import calculate_all_markets, get_naive_baseline
+from core.nhl_api import NHL_TEAMS, get_team_real_stats
 import datetime
 
 st.set_page_config(page_title="HYPER-ICE 360", page_icon="🏒", layout="wide")
@@ -18,14 +19,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALISATION DE LA MÉMOIRE (HISTORIQUE) ---
 if 'historique' not in st.session_state:
     st.session_state.historique = []
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- ONGLETS ---
 tab_analyse, tab_historique = st.tabs(["🔍 Analyse du Match", "📜 Historique des Prédictions"])
 
 with tab_analyse:
@@ -44,21 +43,42 @@ with tab_analyse:
 
         st.subheader("⚔️ Confrontation")
         col_dom, col_ext = st.columns(2)
-        with col_dom:
-            st.markdown("### 🏠 Domicile")
-            equipe_dom = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Maple Leafs", key="nom_dom")
-        with col_ext:
-            st.markdown("### ✈️ Extérieur")
-            equipe_ext = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Canadiens", key="nom_ext")
+        
+        xg_dom_auto = None
+        xg_ext_auto = None
+
+        if ligue_id == "NHL":
+            with col_dom:
+                st.markdown("### 🏠 Domicile")
+                equipe_dom = st.selectbox("Équipe Domicile", list(NHL_TEAMS.keys()), key="sel_dom")
+                stats_dom = get_team_real_stats(NHL_TEAMS[equipe_dom])
+                if stats_dom:
+                    xg_dom_auto = stats_dom["xg"]
+                    st.caption(f"Stats auto : {xg_dom_auto} buts/match (sur {stats_dom['matchs']} matchs)")
+            with col_ext:
+                st.markdown("### ✈️ Extérieur")
+                equipe_ext = st.selectbox("Équipe Extérieur", list(NHL_TEAMS.keys()), index=1, key="sel_ext")
+                stats_ext = get_team_real_stats(NHL_TEAMS[equipe_ext])
+                if stats_ext:
+                    xg_ext_auto = stats_ext["xg"]
+                    st.caption(f"Stats auto : {xg_ext_auto} buts/match (sur {stats_ext['matchs']} matchs)")
+        else:
+            with col_dom:
+                st.markdown("### 🏠 Domicile")
+                equipe_dom = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Färjestad BK", key="nom_dom")
+            with col_ext:
+                st.markdown("### ✈️ Extérieur")
+                equipe_ext = st.text_input("Nom de l'équipe", value="", placeholder="Ex: Frölunda HC", key="nom_ext")
 
         st.divider()
 
         st.subheader("📊 Statistiques (xG)")
+        st.caption("Si les données automatiques sont là, tu peux les modifier manuellement ici.")
         col_stat_dom, col_stat_ext = st.columns(2)
         with col_stat_dom:
-            xg_dom = st.number_input("xG Domicile", value=None, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
+            xg_dom = st.number_input("xG Domicile", value=xg_dom_auto, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
         with col_stat_ext:
-            xg_ext = st.number_input("xG Extérieur", value=None, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
+            xg_ext = st.number_input("xG Extérieur", value=xg_ext_auto, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
 
         st.divider()
 
@@ -87,8 +107,9 @@ with tab_analyse:
             nom_dom = equipe_dom if equipe_dom else "Domicile"
             nom_ext = equipe_ext if equipe_ext else "Extérieur"
             
-            lam_dom = xg_dom if xg_dom is not None else 3.0
-            lam_ext = xg_ext if xg_ext is not None else 2.7
+            lam_dom = xg_dom if xg_dom is not None else (xg_dom_auto if xg_dom_auto else 3.0)
+            lam_ext = xg_ext if xg_ext is not None else (xg_ext_auto if xg_ext_auto else 2.7)
+            
             probs = calculate_all_markets(lam_dom, lam_ext)
             base_probs = get_naive_baseline(ligue_id)
 
@@ -96,7 +117,6 @@ with tab_analyse:
             pf_dom, pf_ext = probs["final_1X2"]
             b_dom, b_nul, b_ext = base_probs["1X2"]
 
-            # --- SAUVEGARDE DANS L'HISTORIQUE ---
             analyse_data = {
                 "Date": str(date_match),
                 "Match": f"{nom_dom} vs {nom_ext}",
@@ -106,12 +126,11 @@ with tab_analyse:
                 "Proba 1": f"{p_dom*100:.1f} %",
                 "Proba X": f"{p_nul*100:.1f} %",
                 "Proba 2": f"{p_ext*100:.1f} %",
-                "Over 5.5": f"{probs['over_5_5']*100:.1f} %"
             }
             st.session_state.historique.append(analyse_data)
-            st.toast("Analyse sauvegardée dans l'historique !", icon="✅")
+            st.toast("Analyse sauvegardée !", icon="✅")
 
-            st.subheader("🎯 Probabilités du Modèle vs Baseline Naïve")
+            st.subheader("🎯 Probabilités du Modèle")
             
             c1, c2, c3 = st.columns(3)
             with c1:
@@ -121,17 +140,17 @@ with tab_analyse:
             with c3:
                 st.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %", delta=f"{(p_ext - b_ext)*100:+.1f}% vs Naïf")
             
-            st.write("**Marché Vainqueur Final (incl. OT/SO)**")
+            st.write("**Vainqueur Final (incl. OT/SO)**")
             c4, c5 = st.columns(2)
             c4.metric(label=f"Vainqueur {nom_dom}", value=f"{pf_dom*100:.1f} %")
             c5.metric(label=f"Vainqueur {nom_ext}", value=f"{pf_ext*100:.1f} %")
             
-            st.write("**Total Buts (60 minutes)**")
+            st.write("**Total Buts (60 min)**")
             c8, c9 = st.columns(2)
             c8.metric(label="Plus de 5.5 buts", value=f"{probs['over_5_5']*100:.1f} %")
             c9.metric(label="Moins de 5.5 buts", value=f"{probs['under_5_5']*100:.1f} %")
             
-            st.write("**Handicap & BTTS (60 minutes)**")
+            st.write("**Handicap & BTTS (60 min)**")
             c6, c7, c10 = st.columns(3)
             c6.metric(label=f"Handicap -1.5 ({nom_dom})", value=f"{probs['handicap_home']*100:.1f} %")
             c7.metric(label=f"Handicap +1.5 ({nom_ext})", value=f"{probs['handicap_away']*100:.1f} %")
@@ -164,7 +183,6 @@ with tab_analyse:
                 calculer_valeur(probs['under_5_5'], cote_under, "Moins de 5.5 buts")
                 calculer_valeur(probs['btts_yes'], cote_btts, "Les 2 marquent (Oui)")
 
-# --- ONGLET HISTORIQUE ---
 with tab_historique:
     st.subheader("📜 Historique de tes analyses")
     if len(st.session_state.historique) == 0:
@@ -174,5 +192,4 @@ with tab_historique:
             st.session_state.historique = []
             st.rerun()
         
-        # Affichage sous forme de tableau
         st.dataframe(st.session_state.historique, use_container_width=True)
