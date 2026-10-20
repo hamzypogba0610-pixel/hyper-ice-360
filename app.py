@@ -24,6 +24,7 @@ st.markdown("""
     .ev-positive { color: #64FFDA; font-weight: bold; font-size: 1.2em; }
     .ev-negative { color: #FF6B6B; font-weight: bold; }
     .clv-positive { color: #FFD700; font-weight: bold; }
+    .verdict-box { background-color: #112240; padding: 20px; border-radius: 10px; border-left: 5px solid #64FFDA; margin-top: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -41,7 +42,48 @@ if 'target_ext' in st.session_state:
     st.session_state.team_ext = st.session_state.target_ext
     del st.session_state.target_ext
 
-# --- 3. FONCTIONS MAGIQUES (Callbacks) ---
+# --- 3. LA COUCHE DU PARTENAIRE : LE VERDICT ---
+def generate_partner_verdict(stats_dom, stats_ext, probs, cote_dom, cote_ext, forme_dom, forme_ext):
+    """Génère une analyse textuelle experte basée sur les données."""
+    verdict = "🧠 **Analyse du Partenaire :**\n\n"
+    
+    # 1. Analyse de la force offensive/défensive
+    if stats_dom['attaque'] > stats_ext['attaque']:
+        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_dom['nom']} ({stats_dom['attaque']:.2f} buts/match) est supérieure à celle de {stats_ext['nom']}.\n"
+    else:
+        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_ext['nom']} ({stats_ext['attaque']:.2f} buts/match) domine celle de {stats_dom['nom']}.\n"
+        
+    # 2. Analyse de la forme (Momentum)
+    score_forme_dom = forme_dom.count("V") - forme_dom.count("D")
+    score_forme_ext = forme_ext.count("V") - forme_ext.count("D")
+    if score_forme_dom > score_forme_ext:
+        verdict += f"- 🔥 **Momentum** : {stats_dom['nom']} est clairement en meilleure forme récente.\n"
+    elif score_forme_ext > score_forme_dom:
+        verdict += f"- 🔥 **Momentum** : {stats_ext['nom']} arrive avec une dynamique plus favorable.\n"
+    else:
+        verdict += "- 🔥 **Momentum** : Les deux équipes affichent une forme récente équilibrée.\n"
+
+    # 3. Analyse du marché (Value)
+    if cote_dom and cote_dom > 0:
+        if probs['1X2'][0] * cote_dom > 1:
+            verdict += f"- 💎 **Value** : Le marché sous-estime {stats_dom['nom']}. La cote de {cote_dom} offre une espérance de gain positive.\n"
+        else:
+            verdict += f"- ⚠️ **Value** : La cote de {cote_dom} est trop basse par rapport à la vraie probabilité de victoire.\n"
+
+    # 4. Conclusion algorithmique
+    verdict += "\n**Conclusion :** "
+    if probs['1X2'][0] > 0.55:
+        verdict += "Le modèle est confiant sur une victoire à domicile. C'est le pari le plus solide selon les stats."
+    elif probs['over_5_5'] > 0.60:
+        verdict += "Match à haut scoring attendu. Le marché des buts (Over 5.5) est le plus attractif."
+    elif probs['btts_yes'] > 0.65:
+        verdict += "Les deux équipes ont une forte propension à marquer. Le BTTS est à surveiller."
+    else:
+        verdict += "Match très serré. Aucun pari évident ne se détache, privilégier le Vainqueur Final ou passer son tour."
+        
+    return verdict
+
+# --- 4. FONCTIONS MAGIQUES (Callbacks) ---
 def switch_to_analysis(h_code, a_code):
     st.session_state.current_page = "🔍 Analyse Manuelle"
     st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == h_code][0]
@@ -68,7 +110,7 @@ def add_to_tracker(match, marche, proba, cote):
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- 4. MENU DE NAVIGATION ---
+# --- 5. MENU DE NAVIGATION ---
 pages = ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"]
 index_actuel = pages.index(st.session_state.current_page)
 
@@ -126,8 +168,7 @@ if navigation == "🎯 Scanner Automatique":
                                 st.button("📌", key=f"btn_sw_{p['match']}_{p['marche']}", 
                                           on_click=add_to_tracker, args=(p['match'], p['marche'], p['proba'], p['cote']), help="Ajouter au tracker")
                         st.divider()
-
-# ==========================================
+                      # ==========================================
 # PAGE 2 : ANALYSE MANUELLE
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
@@ -142,19 +183,19 @@ elif navigation == "🔍 Analyse Manuelle":
             with col1:
                 equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), index=default_home, key="team_dom")
                 stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
+                forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
                 if stats_dom:
                     st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
                     st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
-                    forme = get_team_last_games(NHL_TEAMS[equipe_dom])
-                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
+                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom]))
             with col2:
                 equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), index=default_away, key="team_ext")
                 stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
+                forme_ext = get_team_last_games(NHL_TEAMS[equipe_ext])
                 if stats_ext:
                     st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
                     st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
-                    forme = get_team_last_games(NHL_TEAMS[equipe_ext])
-                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
+                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_ext]))
 
         elif ligue_id == "SHL":
             with col1:
@@ -165,8 +206,9 @@ elif navigation == "🔍 Analyse Manuelle":
                 equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(SHL_TEAMS.keys()), index=1)
                 att_ext = st.number_input("Attaque (buts/match)", value=SHL_TEAMS[equipe_ext]["attaque"], step=0.1)
                 def_ext = st.number_input("Défense (encaissés/match)", value=SHL_TEAMS[equipe_ext]["defense"], step=0.1)
-            stats_dom = {"attaque": att_dom, "defense": def_dom}
-            stats_ext = {"attaque": att_ext, "defense": def_ext}
+            stats_dom = {"nom": equipe_dom, "attaque": att_dom, "defense": def_dom}
+            stats_ext = {"nom": equipe_ext, "attaque": att_ext, "defense": def_ext}
+            forme_dom, forme_ext = [], []
 
         elif ligue_id == "LIIGA":
             with col1:
@@ -177,8 +219,9 @@ elif navigation == "🔍 Analyse Manuelle":
                 equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(LIIGA_TEAMS.keys()), index=1)
                 att_ext = st.number_input("Attaque (buts/match)", value=LIIGA_TEAMS[equipe_ext]["attaque"], step=0.1)
                 def_ext = st.number_input("Défense (encaissés/match)", value=LIIGA_TEAMS[equipe_ext]["defense"], step=0.1)
-            stats_dom = {"attaque": att_dom, "defense": def_dom}
-            stats_ext = {"attaque": att_ext, "defense": def_ext}
+            stats_dom = {"nom": equipe_dom, "attaque": att_dom, "defense": def_dom}
+            stats_ext = {"nom": equipe_ext, "attaque": att_ext, "defense": def_ext}
+            forme_dom, forme_ext = [], []
 
         st.divider()
         st.subheader("💰 Cotes (Optionnel)")
@@ -205,6 +248,11 @@ elif navigation == "🔍 Analyse Manuelle":
             if cote_ext and (probs['1X2'][2] * cote_ext) - 1 > 0:
                 st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_ext} !")
 
+            # --- LA COUCHE DU PARTENAIRE ---
+            if ligue_id == "NHL":
+                verdict_texte = generate_partner_verdict(stats_dom, stats_ext, probs, cote_dom, cote_ext, forme_dom, forme_ext)
+                st.markdown(f'<div class="verdict-box">{verdict_texte}</div>', unsafe_allow_html=True)
+
 # ==========================================
 # PAGE 3 : TRACKER & BANKROLL
 # ==========================================
@@ -217,7 +265,7 @@ elif navigation == "📜 Tracker & Bankroll":
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("💰 Bankroll", f"{st.session_state.bankroll:.2f} €", f"{profit:+.2f} €")
-    m2.metric("🎯 Brier Score", f"{brier:.3f}", help="Plus proche de 0 = Meilleur. (0.25 = Hasard)")
+    m2.metric("🎯 Brier Score", f"{brier:.3f}", help="Plus proche de 0 = Meilleur.")
     m3.metric("📉 Log-Loss", f"{logloss:.3f}", help="Plus bas = Mieux.")
     
     total_regles = len([p for p in st.session_state.historique if p["Statut"] in ["Gagné", "Perdu"]])
