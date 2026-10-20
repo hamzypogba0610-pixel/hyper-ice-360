@@ -61,7 +61,7 @@ with st.container():
     st.divider()
 
     # Ligne 3 : Statistiques (xG)
-    st.subheader("📊 Statistiques Avancées (Optionnel)")
+    st.subheader("📊 Statistiques Avancées")
     col_stat_dom, col_stat_ext = st.columns(2)
     
     with col_stat_dom:
@@ -76,63 +76,55 @@ with st.container():
 
     st.divider()
 
-    # Ligne 4 : Le Simulateur
-    st.subheader("🧮 Simulateur de points (Test du moteur)")
-    st.caption("Vérifie comment les règles de la ligue s'appliquent.")
-    
-    col_sim1, col_sim2 = st.columns(2)
-    with col_sim1:
-        score_dom_60 = st.number_input("Buts Dom (60 min)", min_value=0, value=None, key="sim_dom_60", placeholder="0")
-        score_dom_fin = st.number_input("Buts Dom (Final)", min_value=0, value=None, key="sim_dom_fin", placeholder="0")
-    with col_sim2:
-        score_ext_60 = st.number_input("Buts Ext (60 min)", min_value=0, value=None, key="sim_ext_60", placeholder="0")
-        score_ext_fin = st.number_input("Buts Ext (Final)", min_value=0, value=None, key="sim_ext_fin", placeholder="0")
-
-    # Bouton d'action
+    # Bouton d'action principal
     if st.button("LANCER L'ANALYSE 🚀"):
-        
-        # Gestion des valeurs vides
-        v_dom_60 = score_dom_60 if score_dom_60 is not None else 0
-        v_dom_fin = score_dom_fin if score_dom_fin is not None else 0
-        v_ext_60 = score_ext_60 if score_ext_60 is not None else 0
-        v_ext_fin = score_ext_fin if score_ext_fin is not None else 0
         
         nom_dom = equipe_dom if equipe_dom else "Équipe Domicile"
         nom_ext = equipe_ext if equipe_ext else "Équipe Extérieur"
 
-        try:
-            # 1. Calcul des points (ce qu'on avait déjà)
-            pts_dom, pts_ext = compute_points(
-                ligue_id, v_dom_60, v_ext_60, v_dom_fin, v_ext_fin
-            )
-            
-            st.success(f"**Analyse terminée pour {nom_dom} vs {nom_ext} ({ligue.name})**")
-            
-            res1, res2 = st.columns(2)
-            res1.metric(label=f"Points {nom_dom}", value=f"{pts_dom} pts")
-            res2.metric(label=f"Points {nom_ext}", value=f"{pts_ext} pts")
-            
-            st.info(f"ℹ️ Règles appliquées : Système {ligue.points_system} | Format OT : {ligue.ot_format}")
-            
-            st.divider()
+        # --- 1. CALCUL DES PROBABILITÉS (MOTEUR) ---
+        st.subheader(f"🎯 Prédiction (Marché 1X2 à 60 min)")
+        
+        # Si pas de xG renseigné, on met une moyenne de ligue par défaut (ex: 3.0)
+        lam_dom = xg_dom if xg_dom is not None else 3.0
+        lam_ext = xg_ext if xg_ext is not None else 2.7
+        
+        st.write(f"*Basé sur des buts attendus (xG) de **{lam_dom}** pour {nom_dom} et **{lam_ext}** pour {nom_ext}.*")
+        
+        # Appel du cerveau mathématique
+        p_dom, p_nul, p_ext = calculate_1x2_proba(lam_dom, lam_ext)
+        
+        # Affichage des probabilités
+        prob1, prob2, prob3 = st.columns(3)
+        prob1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
+        prob2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
+        prob3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
 
-            # 2. CALCUL DES PROBABILITÉS (NOUVEAU !)
-            st.subheader("🎯 Prédiction (Marché 1X2 à 60 min)")
+    st.divider()
+
+    # --- 2. SIMULATEUR DE POINTS (Optionnel, dans un menu fermé) ---
+    with st.expander("🧮 Outil : Simulateur de points au classement (Optionnel)"):
+        st.caption("Remplis un score pour vérifier comment les points sont attribués dans cette ligue.")
+        
+        col_sim1, col_sim2 = st.columns(2)
+        with col_sim1:
+            score_dom_60 = st.number_input("Buts Dom (60 min)", min_value=0, value=None, key="sim_dom_60", placeholder="0")
+            score_dom_fin = st.number_input("Buts Dom (Final)", min_value=0, value=None, key="sim_dom_fin", placeholder="0")
+        with col_sim2:
+            score_ext_60 = st.number_input("Buts Ext (60 min)", min_value=0, value=None, key="sim_ext_60", placeholder="0")
+            score_ext_fin = st.number_input("Buts Ext (Final)", min_value=0, value=None, key="sim_ext_fin", placeholder="0")
             
-            # Si l'utilisateur n'a pas mis de xG, on met une moyenne de ligue par défaut (ex: 3.0)
-            lam_dom = xg_dom if xg_dom is not None else 3.0
-            lam_ext = xg_ext if xg_ext is not None else 2.7
-            
-            st.write(f"*Basé sur des buts attendus (xG) de {lam_dom} pour {nom_dom} et {lam_ext} pour {nom_ext}.*")
-            
-            # Appel du cerveau mathématique
-            p_dom, p_nul, p_ext = calculate_1x2_proba(lam_dom, lam_ext)
-            
-            # Affichage des probabilités
-            prob1, prob2, prob3 = st.columns(3)
-            prob1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
-            prob2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
-            prob3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
-            
-        except Exception as e:
-            st.error(f"Erreur de calcul : {e}")
+        if st.button("Calculer les points"):
+            v_dom_60 = score_dom_60 if score_dom_60 is not None else 0
+            v_dom_fin = score_dom_fin if score_dom_fin is not None else 0
+            v_ext_60 = score_ext_60 if score_ext_60 is not None else 0
+            v_ext_fin = score_ext_fin if score_ext_fin is not None else 0
+
+            try:
+                pts_dom, pts_ext = compute_points(ligue_id, v_dom_60, v_ext_60, v_dom_fin, v_ext_fin)
+                st.success(f"**Points : Domicile {pts_dom} | Extérieur {pts_ext}**")
+            except Exception as e:
+                if "égalité" in str(e):
+                    st.warning("⚠️ Un match de hockey ne peut pas se finir sur un match nul. Ajoute un but en prolongation ou aux tirs au but.")
+                else:
+                    st.error(f"Erreur : {e}")
