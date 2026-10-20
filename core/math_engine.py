@@ -106,3 +106,45 @@ def calculate_clv(cote_ouverture, cote_fermeture):
     if cote_ouverture is None or cote_fermeture is None or cote_ouverture <= 0 or cote_fermeture <= 0:
         return 0.0
     return (cote_ouverture / cote_fermeture) - 1
+
+def calculate_brier_score(predictions):
+    """
+    Calcule le Brier Score moyen.
+    predictions est une liste de dictionnaires avec 'proba' et 'statut' (Gagné/Perdu).
+    """
+    # On ne garde que les paris réglés (gagnés ou perdus)
+    regles = [p for p in predictions if p.get("Statut") in ["Gagné", "Perdu"]]
+    if not regles:
+        return 0.0
+    
+    total_error = 0.0
+    for p in regles:
+        proba = p["Proba"] / 100.0 # On repasse en 0-1
+        resultat_reel = 1.0 if p["Statut"] == "Gagné" else 0.0
+        total_error += (proba - resultat_reel) ** 2
+        
+    return total_error / len(regles)
+
+def calculate_log_loss(predictions):
+    """
+    Calcule la Log-Loss moyenne.
+    Pénalise fortement les erreurs très confiantes.
+    """
+    import math
+    regles = [p for p in predictions if p.get("Statut") in ["Gagné", "Perdu"]]
+    if not regles:
+        return 0.0
+        
+    total_loss = 0.0
+    for p in regles:
+        proba = p["Proba"] / 100.0
+        # On borne pour éviter les erreurs de logarithme (log(0))
+        proba = max(0.01, min(0.99, proba)) 
+        resultat_reel = 1.0 if p["Statut"] == "Gagné" else 0.0
+        
+        if resultat_reel == 1.0:
+            total_loss -= math.log(proba)
+        else:
+            total_loss -= math.log(1 - proba)
+            
+    return total_loss / len(regles)
