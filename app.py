@@ -1,6 +1,7 @@
 import streamlit as st
+import pandas as pd
 from core.leagues import LEAGUES, list_markets, compute_points
-from core.math_engine import calculate_all_markets, get_naive_baseline
+from core.math_engine import calculate_all_markets, get_naive_baseline, get_goal_matrix
 from core.nhl_api import NHL_TEAMS, get_team_real_stats
 import datetime
 
@@ -72,7 +73,6 @@ with tab_analyse:
 
         st.divider()
 
-        # On laisse la possibilité de modifier manuellement (utile pour SHL/Liiga ou pour forcer un xG)
         st.subheader("📊 Ajustement manuel (xG)")
         col_stat_dom, col_stat_ext = st.columns(2)
         with col_stat_dom:
@@ -107,13 +107,10 @@ with tab_analyse:
             nom_dom = equipe_dom if equipe_dom else "Domicile"
             nom_ext = equipe_ext if equipe_ext else "Extérieur"
             
-            # --- LA FORMULE MAGIQUE (Attaque x Défense) ---
             if ligue_id == "NHL" and stats_dom and stats_ext and xg_dom is None:
-                # Avantage du terrain (Dom x1.05, Ext x0.95)
                 lam_dom = ((stats_dom['attaque'] + stats_ext['defense']) / 2) * 1.05
                 lam_ext = ((stats_ext['attaque'] + stats_dom['defense']) / 2) * 0.95
             else:
-                # Si SHL/Liiga ou saisie manuelle
                 lam_dom = xg_dom if xg_dom is not None else 3.0
                 lam_ext = xg_ext if xg_ext is not None else 2.7
             
@@ -148,6 +145,20 @@ with tab_analyse:
             with c3:
                 st.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %", delta=f"{(p_ext - b_ext)*100:+.1f}% vs Naïf")
             
+            # --- AFFICHAGE DE LA GOAL MATRIX ---
+            st.write("### 🎲 Matrice des Scores (Probabilités en %)")
+            st.caption(f"Lignes = Buts {nom_dom} | Colonnes = Buts {nom_ext}")
+            
+            matrix_data = get_goal_matrix(lam_dom, lam_ext, max_goals=5)
+            
+            # Création du tableau Pandas
+            df_matrix = pd.DataFrame(matrix_data)
+            df_matrix.index = [f"{i} buts" for i in range(6)]
+            df_matrix.columns = [f"{i} buts" for i in range(6)]
+            
+            # Affichage avec un dégradé de couleur
+            st.dataframe(df_matrix.style.background_gradient(cmap="Blues", axis=None).format("{:.2f}"), use_container_width=True)
+
             st.write("**Vainqueur Final (incl. OT/SO)**")
             c4, c5 = st.columns(2)
             c4.metric(label=f"Vainqueur {nom_dom}", value=f"{pf_dom*100:.1f} %")
