@@ -1,10 +1,12 @@
 import streamlit as st
 from core.leagues import LEAGUES, list_markets, compute_points
-from core.math_engine import calculate_all_markets
+from core.math_engine import calculate_all_markets, get_naive_baseline
 import datetime
 
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="HYPER-ICE 360", page_icon="🏒", layout="wide")
 
+# --- DESIGN CSS (Couleurs Hockey) ---
 st.markdown("""
     <style>
     .stApp { background-color: #0A192F; }
@@ -55,28 +57,23 @@ with st.container():
     st.divider()
 
     st.subheader("💰 Cotes du Bookmaker (Optionnel)")
-    st.caption("Rentre les cotes pour voir si le modèle détecte une 'Value'.")
     
-    # Ligne 1 : 1X2
     st.write("**1X2 (60 min)**")
     c1, c2, c3 = st.columns(3)
     cote_dom = c1.number_input("1 (Dom)", min_value=1.01, value=None, step=0.01, key="c_dom", placeholder="2.10")
     cote_nul = c2.number_input("X (Nul)", min_value=1.01, value=None, step=0.01, key="c_nul", placeholder="4.20")
     cote_ext = c3.number_input("2 (Ext)", min_value=1.01, value=None, step=0.01, key="c_ext", placeholder="3.50")
     
-    # Ligne 2 : Vainqueur Final
     st.write("**Vainqueur Final (OT/SO inclus)**")
     c4, c5 = st.columns(2)
     cote_final_dom = c4.number_input(f"Vainqueur {equipe_dom if equipe_dom else 'Dom'}", min_value=1.01, value=None, step=0.01, key="c_fdom", placeholder="1.80")
     cote_final_ext = c5.number_input(f"Vainqueur {equipe_ext if equipe_ext else 'Ext'}", min_value=1.01, value=None, step=0.01, key="c_fext", placeholder="2.00")
     
-    # Ligne 3 : Buts (Over/Under)
     st.write("**Total Buts (60 min)**")
     c8, c9 = st.columns(2)
     cote_over = c8.number_input("Plus de 5.5 buts", min_value=1.01, value=None, step=0.01, key="c_over", placeholder="1.90")
     cote_under = c9.number_input("Moins de 5.5 buts", min_value=1.01, value=None, step=0.01, key="c_under", placeholder="1.90")
 
-    # Ligne 4 : Handicap et BTTS
     st.write("**Handicap & BTTS**")
     c6, c7, c10 = st.columns(3)
     cote_h_dom = c6.number_input("Hand. -1.5 (Dom)", min_value=1.01, value=None, step=0.01, key="c_hdom", placeholder="2.50")
@@ -91,30 +88,35 @@ with st.container():
         
         lam_dom = xg_dom if xg_dom is not None else 3.0
         lam_ext = xg_ext if xg_ext is not None else 2.7
-        
         probs = calculate_all_markets(lam_dom, lam_ext)
+        base_probs = get_naive_baseline(ligue_id)
+
         p_dom, p_nul, p_ext = probs["1X2"]
         pf_dom, pf_ext = probs["final_1X2"]
+        b_dom, b_nul, b_ext = base_probs["1X2"]
 
-        st.subheader("🎯 Probabilités du Modèle")
+        st.subheader("🎯 Probabilités du Modèle vs Baseline Naïve")
         
         st.write("**Marché 1X2 (60 minutes)**")
         c1, c2, c3 = st.columns(3)
-        c1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
-        c2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
-        c3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
+        with c1:
+            st.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %", delta=f"{(p_dom - b_dom)*100:+.1f}% vs Naïf")
+        with c2:
+            st.metric(label="Match Nul", value=f"{p_nul*100:.1f} %", delta=f"{(p_nul - b_nul)*100:+.1f}% vs Naïf")
+        with c3:
+            st.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %", delta=f"{(p_ext - b_ext)*100:+.1f}% vs Naïf")
         
         st.write("**Marché Vainqueur Final (incl. OT/SO)**")
         c4, c5 = st.columns(2)
         c4.metric(label=f"Vainqueur {nom_dom}", value=f"{pf_dom*100:.1f} %")
         c5.metric(label=f"Vainqueur {nom_ext}", value=f"{pf_ext*100:.1f} %")
         
-        st.write("**Marché Total Buts (60 minutes)**")
+        st.write("**Total Buts (60 minutes)**")
         c8, c9 = st.columns(2)
         c8.metric(label="Plus de 5.5 buts", value=f"{probs['over_5_5']*100:.1f} %")
         c9.metric(label="Moins de 5.5 buts", value=f"{probs['under_5_5']*100:.1f} %")
         
-        st.write("**Marché Handicap & BTTS (60 minutes)**")
+        st.write("**Handicap & BTTS (60 minutes)**")
         c6, c7, c10 = st.columns(3)
         c6.metric(label=f"Handicap -1.5 ({nom_dom})", value=f"{probs['handicap_home']*100:.1f} %")
         c7.metric(label=f"Handicap +1.5 ({nom_ext})", value=f"{probs['handicap_away']*100:.1f} %")
