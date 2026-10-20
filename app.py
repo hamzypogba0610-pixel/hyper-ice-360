@@ -20,11 +20,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALISATION DE LA MÉMOIRE ---
 if 'historique' not in st.session_state:
     st.session_state.historique = []
 if 'bankroll' not in st.session_state:
-    st.session_state.bankroll = 1000.0  # On commence avec 1000€ virtuels
+    st.session_state.bankroll = 1000.0
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
@@ -32,7 +31,6 @@ st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des ri
 tab_analyse, tab_historique = st.tabs(["🔍 Analyse du Match", "📜 Tracker de Paris & Bankroll"])
 
 with tab_analyse:
-    # [Le code de l'onglet Analyse reste exactement le même qu'avant]
     with st.container():
         col1, col2, col3 = st.columns([2, 2, 1])
         with col1:
@@ -125,7 +123,6 @@ with tab_analyse:
             pf_dom, pf_ext = probs["final_1X2"]
             b_dom, b_nul, b_ext = base_probs["1X2"]
 
-            # --- DÉTECTION DU MEILLEUR PARI (POUR L'HISTORIQUE) ---
             best_bet = None
             best_ev = 0
             def check_best(proba, cote, nom, prob_str):
@@ -172,24 +169,27 @@ with tab_analyse:
             with c3:
                 st.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %", delta=f"{(p_ext - b_ext)*100:+.1f}% vs Naïf")
             
+            # --- AFFICHAGE DE LA MATRICE (SANS COULEUR) ---
             st.write("### 🎲 Matrice des Scores (Probabilités en %)")
+            st.caption(f"Lignes = Buts {nom_dom} | Colonnes = Buts {nom_ext}")
+            
             matrix_data = get_goal_matrix(lam_dom, lam_ext, max_goals=5)
             df_matrix = pd.DataFrame(matrix_data)
             df_matrix.index = [f"{i} buts" for i in range(6)]
             df_matrix.columns = [f"{i} buts" for i in range(6)]
-            st.dataframe(df_matrix.style.background_gradient(cmap="Blues", axis=None).format("{:.2f}"), use_container_width=True)
+            
+            # Affichage propre et simple
+            st.dataframe(df_matrix.style.format("{:.2f}"), use_container_width=True)
 
             if best_ev > 0:
                 st.success(f"💎 **Meilleur Value Bet détecté :** {best_bet['nom']} à la cote {best_bet['cote']} (EV: +{best_ev*100:.1f}%)")
 
-# --- ONGLET TRACKER & BANKROLL ---
 with tab_historique:
     st.subheader("💰 Gestion de Bankroll")
     
     col_bk1, col_bk2 = st.columns(2)
     col_bk1.metric("Bankroll Actuelle", f"{st.session_state.bankroll:.2f} €")
     
-    # Calcul du profit total
     profit = st.session_state.bankroll - 1000.0
     col_bk2.metric("Profit / Perte", f"{profit:+.2f} €", delta=f"{profit:.2f} €")
 
@@ -200,14 +200,12 @@ with tab_historique:
     if len(st.session_state.historique) == 0:
         st.info("Aucune analyse pour le moment. Va dans l'onglet Analyse !")
     else:
-        # Affichage du tableau
         df_hist = pd.DataFrame(st.session_state.historique)
         st.dataframe(df_hist[["Date", "Match", "Pari Conseillé", "Cote", "Statut", "Gain_Net"]], use_container_width=True)
 
         st.divider()
         st.write("**Mettre à jour un résultat ?**")
         
-        # Menu pour choisir le match à mettre à jour
         matchs_en_attente = [i for i, m in enumerate(st.session_state.historique) if m["Statut"] == "En attente"]
         
         if matchs_en_attente:
@@ -218,7 +216,6 @@ with tab_historique:
                 if st.button("✅ Le pari est GAGNÉ"):
                     idx = choix
                     cote = st.session_state.historique[idx]["Cote"]
-                    # Mise de 10€ virtuelle (ou 1% de la bankroll)
                     mise = 10.0 
                     gain = mise * (cote - 1)
                     
