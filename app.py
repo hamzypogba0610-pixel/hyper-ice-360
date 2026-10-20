@@ -24,7 +24,8 @@ st.markdown("""
     .ev-positive { color: #64FFDA; font-weight: bold; font-size: 1.2em; }
     .ev-negative { color: #FF6B6B; font-weight: bold; }
     .clv-positive { color: #FFD700; font-weight: bold; }
-    .verdict-box { background-color: #112240; padding: 20px; border-radius: 10px; border-left: 5px solid #64FFDA; margin-top: 20px; }
+    .verdict-box { background-color: #112240; padding: 20px; border-radius: 10px; border-left: 5px solid #64FFDA; margin-top: 20px; color: #E6F1FF; }
+    .combo-box { background-color: #1A365D; padding: 15px; border-radius: 8px; border: 1px dashed #64FFDA; margin-top: 15px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,44 +43,66 @@ if 'target_ext' in st.session_state:
     st.session_state.team_ext = st.session_state.target_ext
     del st.session_state.target_ext
 
-# --- 3. LA COUCHE DU PARTENAIRE : LE VERDICT ---
+# --- 3. LA COUCHE DU PARTENAIRE : LE VERDICT AVEC COMBINAISONS ---
 def generate_partner_verdict(stats_dom, stats_ext, probs, cote_dom, cote_ext, forme_dom, forme_ext):
-    """Génère une analyse textuelle experte basée sur les données."""
     verdict = "🧠 **Analyse du Partenaire :**\n\n"
     
-    # 1. Analyse de la force offensive/défensive
     if stats_dom['attaque'] > stats_ext['attaque']:
-        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_dom['nom']} ({stats_dom['attaque']:.2f} buts/match) est supérieure à celle de {stats_ext['nom']}.\n"
+        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_dom['nom']} ({stats_dom['attaque']:.2f} buts/match) est supérieure.\n"
     else:
-        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_ext['nom']} ({stats_ext['attaque']:.2f} buts/match) domine celle de {stats_dom['nom']}.\n"
+        verdict += f"- ⚔️ **Pouvoir offensif** : L'attaque de {stats_ext['nom']} ({stats_ext['attaque']:.2f} buts/match) domine.\n"
         
-    # 2. Analyse de la forme (Momentum)
     score_forme_dom = forme_dom.count("V") - forme_dom.count("D")
     score_forme_ext = forme_ext.count("V") - forme_ext.count("D")
     if score_forme_dom > score_forme_ext:
-        verdict += f"- 🔥 **Momentum** : {stats_dom['nom']} est clairement en meilleure forme récente.\n"
+        verdict += f"- 🔥 **Momentum** : {stats_dom['nom']} est en meilleure forme.\n"
     elif score_forme_ext > score_forme_dom:
-        verdict += f"- 🔥 **Momentum** : {stats_ext['nom']} arrive avec une dynamique plus favorable.\n"
+        verdict += f"- 🔥 **Momentum** : {stats_ext['nom']} a la dynamique pour lui.\n"
     else:
-        verdict += "- 🔥 **Momentum** : Les deux équipes affichent une forme récente équilibrée.\n"
+        verdict += "- 🔥 **Momentum** : Forme équilibrée.\n"
 
-    # 3. Analyse du marché (Value)
     if cote_dom and cote_dom > 0:
         if probs['1X2'][0] * cote_dom > 1:
-            verdict += f"- 💎 **Value** : Le marché sous-estime {stats_dom['nom']}. La cote de {cote_dom} offre une espérance de gain positive.\n"
+            verdict += f"- 💎 **Value** : La cote de {cote_dom} sur {stats_dom['nom']} est généreuse.\n"
         else:
-            verdict += f"- ⚠️ **Value** : La cote de {cote_dom} est trop basse par rapport à la vraie probabilité de victoire.\n"
+            verdict += f"- ⚠️ **Value** : La cote de {cote_dom} est trop basse.\n"
 
-    # 4. Conclusion algorithmique
-    verdict += "\n**Conclusion :** "
-    if probs['1X2'][0] > 0.55:
-        verdict += "Le modèle est confiant sur une victoire à domicile. C'est le pari le plus solide selon les stats."
-    elif probs['over_5_5'] > 0.60:
-        verdict += "Match à haut scoring attendu. Le marché des buts (Over 5.5) est le plus attractif."
-    elif probs['btts_yes'] > 0.65:
-        verdict += "Les deux équipes ont une forte propension à marquer. Le BTTS est à surveiller."
+    # --- MOTEUR DE COMBINAISONS ---
+    p_dom = probs['1X2'][0]
+    p_ext = probs['1X2'][2]
+    p_over = probs['over_5_5']
+    p_btts = probs['btts_yes']
+    p_hand_dom = probs['handicap_home']
+    
+    combos = []
+    
+    # 1. Victoire + Over
+    if p_dom > 0.50 and p_over > 0.55:
+        combos.append(f"🎯 **{stats_dom['nom']} gagne ET Plus de 5.5 buts**")
+    if p_ext > 0.50 and p_over > 0.55:
+        combos.append(f"🎯 **{stats_ext['nom']} gagne ET Plus de 5.5 buts**")
+        
+    # 2. Victoire + BTTS
+    if p_dom > 0.50 and p_btts > 0.60:
+        combos.append(f"🎯 **{stats_dom['nom']} gagne ET Les 2 marquent**")
+    if p_ext > 0.50 and p_btts > 0.60:
+        combos.append(f"🎯 **{stats_ext['nom']} gagne ET Les 2 marquent**")
+        
+    # 3. Over + BTTS (Match spectacle)
+    if p_over > 0.60 and p_btts > 0.65:
+        combos.append("🎯 **Plus de 5.5 buts ET Les 2 marquent (Match spectaculaire)**")
+        
+    # 4. Handicap
+    if p_hand_dom > 0.50:
+        combos.append(f"🎯 **{stats_dom['nom']} gagne par 2 buts ou plus (Handicap -1.5)**")
+
+    # Ajout au verdict
+    verdict += "\n**Combinaisons recommandées :**\n"
+    if combos:
+        for c in combos[:2]: # On garde les 2 meilleures
+            verdict += f"{c}\n"
     else:
-        verdict += "Match très serré. Aucun pari évident ne se détache, privilégier le Vainqueur Final ou passer son tour."
+        verdict += "- Match trop serré ou probabilités trop faibles pour une combinaison sûre. Jouez le 1X2 simple ou passez.\n"
         
     return verdict
 
@@ -93,19 +116,15 @@ def switch_to_analysis(h_code, a_code):
 def add_to_tracker(match, marche, proba, cote):
     for p in st.session_state.historique:
         if p["Match"] == match and p["Marche"] == marche:
-            st.toast("⚠️ Ce pari est déjà dans ton tracker !", icon="⚠️")
+            st.toast("⚠️ Déjà dans le tracker !", icon="⚠️")
             return
-    nouveau_pari = {
+    st.session_state.historique.append({
         "Date": str(datetime.date.today()),
-        "Match": match,
-        "Marche": marche,
-        "Proba": round(proba * 100, 1),
-        "Cote": cote,
-        "Statut": "En attente",
-        "Gain_Net": 0.0
-    }
-    st.session_state.historique.append(nouveau_pari)
-    st.toast("✅ Pari ajouté au tracker !", icon="📌")
+        "Match": match, "Marche": marche,
+        "Proba": round(proba * 100, 1), "Cote": cote,
+        "Statut": "En attente", "Gain_Net": 0.0
+    })
+    st.toast("✅ Pari ajouté !", icon="📌")
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
@@ -168,7 +187,7 @@ if navigation == "🎯 Scanner Automatique":
                                 st.button("📌", key=f"btn_sw_{p['match']}_{p['marche']}", 
                                           on_click=add_to_tracker, args=(p['match'], p['marche'], p['proba'], p['cote']), help="Ajouter au tracker")
                         st.divider()
-                      # ==========================================
+# ==========================================
 # PAGE 2 : ANALYSE MANUELLE
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
@@ -235,9 +254,21 @@ elif navigation == "🔍 Analyse Manuelle":
             lam_ext = ((stats_ext['attaque'] + stats_dom['defense']) / 2) * 0.95
             probs = calculate_all_markets(lam_dom, lam_ext)
             
-            st.subheader("🎯 Probabilités")
+            st.subheader("🎯 Probabilités du Modèle")
             st.caption(f"xG calculés : {equipe_dom} = {lam_dom:.2f} | {equipe_ext} = {lam_ext:.2f}")
             
+            # AFFICHAGE COMPLET DES MARCHÉS
+            c1, c2, c3 = st.columns(3)
+            c1.metric(label=f"Victoire {equipe_dom}", value=f"{probs['1X2'][0]*100:.1f} %")
+            c2.metric(label="Match Nul", value=f"{probs['1X2'][1]*100:.1f} %")
+            c3.metric(label=f"Victoire {equipe_ext}", value=f"{probs['1X2'][2]*100:.1f} %")
+            
+            st.write("**Autres Marchés (60 min)**")
+            c4, c5, c6 = st.columns(3)
+            c4.metric(label="Plus de 5.5 buts", value=f"{probs['over_5_5']*100:.1f} %")
+            c5.metric(label="Les 2 marquent (Oui)", value=f"{probs['btts_yes']*100:.1f} %")
+            c6.metric(label=f"Handicap -1.5 ({equipe_dom})", value=f"{probs['handicap_home']*100:.1f} %")
+
             st.write("### 🎲 Matrice des Scores")
             matrix_data = get_goal_matrix(lam_dom, lam_ext)
             df_matrix = pd.DataFrame(matrix_data).style.format("{:.2f}")
