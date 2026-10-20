@@ -3,6 +3,7 @@ import pandas as pd
 from core.leagues import LEAGUES, list_markets, compute_points
 from core.math_engine import calculate_all_markets, get_naive_baseline, get_goal_matrix
 from core.nhl_api import NHL_TEAMS, get_all_teams_stats, get_team_last_games, get_upcoming_games
+from core.europe_teams import SHL_TEAMS, LIIGA_TEAMS
 from core.scanner import scan_matches
 import datetime
 
@@ -26,29 +27,12 @@ st.markdown("""
 # --- 1. INITIALISATION DE LA MÉMOIRE ---
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
-
 if 'page_choice' not in st.session_state: st.session_state.page_choice = "🎯 Scanner Automatique"
-if 'team_dom' not in st.session_state: st.session_state.team_dom = list(NHL_TEAMS.keys())[0]
-if 'team_ext' not in st.session_state: st.session_state.team_ext = list(NHL_TEAMS.keys())[1]
 
-# --- 2. TRANSFERT DES CIBLES ---
-if 'target_dom' in st.session_state:
-    st.session_state.team_dom = st.session_state.target_dom
-    del st.session_state.target_dom
-if 'target_ext' in st.session_state:
-    st.session_state.team_ext = st.session_state.target_ext
-    del st.session_state.target_ext
-
-# --- 3. LA FONCTION MAGIQUE (Callback) ---
-def switch_to_analysis(h_code, a_code):
-    st.session_state.page_choice = "🔍 Analyse Manuelle"
-    st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == h_code][0]
-    st.session_state.target_ext = [k for k, v in NHL_TEAMS.items() if v == a_code][0]
-
+# --- 2. MENU DE NAVIGATION ---
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- 4. MENU DE NAVIGATION ---
 navigation = st.radio(
     "Navigation",
     ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"],
@@ -64,7 +48,7 @@ st.divider()
 # ==========================================
 if navigation == "🎯 Scanner Automatique":
     st.subheader("🎯 Chasseur de Pépites")
-    st.write("Le scanner analyse tous les matchs à venir et filtre selon tes critères.")
+    st.write("Le scanner analyse tous les matchs à venir (NHL uniquement pour l'instant) et filtre selon tes critères.")
     
     col_scan1, col_scan2 = st.columns(2)
     with col_scan1:
@@ -87,14 +71,12 @@ if navigation == "🎯 Scanner Automatique":
         with st.spinner("Radar en cours... Analyse des données NHL..."):
             upcoming = get_upcoming_games(horizon)
             if not upcoming:
-                st.warning("Aucun match trouvé sur cette période (ou API indisponible).")
+                st.warning("Aucun match trouvé sur cette période.")
             else:
                 pepites = scan_matches(upcoming, seuil, markets_to_check)
-                
                 st.write(f"**{len(upcoming)} matchs scannés** | **{len(pepites)} pépites trouvées**")
-                
                 if len(pepites) == 0:
-                    st.info("Aucun match ne passe ton seuil. Baisse le seuil ou élargis l'horizon.")
+                    st.info("Aucun match ne passe ton seuil.")
                 else:
                     for p in pepites:
                         with st.container():
@@ -104,44 +86,86 @@ if navigation == "🎯 Scanner Automatique":
                                 st.caption(f"Marché : {p['marche']}")
                             with colB:
                                 st.metric(label="Probabilité", value=f"{p['proba']*100:.1f}%")
-                                cote_juste = 1 / p['proba']
-                                st.caption(f"Cote juste : {cote_juste:.2f}")
+                                st.caption(f"Cote juste : {1/p['proba']:.2f}")
                             with colC:
-                                st.button(
-                                    "Analyser", 
-                                    key=f"btn_{p['match']}_{p['marche']}",
-                                    on_click=switch_to_analysis,
-                                    args=(p["h_code"], p["a_code"])
-                                )
+                                # On stocke le match en mémoire pour l'analyse
+                                if st.button("Analyser", key=f"btn_{p['match']}_{p['marche']}"):
+                                    st.session_state.page_choice = "🔍 Analyse Manuelle"
+                                    st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == p["h_code"]][0]
+                                    st.session_state.target_ext = [k for k, v in NHL_TEAMS.items() if v == p["a_code"]][0]
+                                    st.rerun()
                             st.divider()
 
 # ==========================================
 # PAGE 2 : ANALYSE MANUELLE
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
+    # 1. Choix de la ligue
+    ligue_id = st.selectbox("🏆 Compétition", list(LEAGUES.keys()))
+    
+    st.divider()
     with st.container():
         col1, col2 = st.columns(2)
-        with col1:
-            equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), key="team_dom")
-            stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
-            if stats_dom:
-                st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                # Arrondi à 2 décimales ici
-                st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
-                forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
-                st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom]))
-        with col2:
-            equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), key="team_ext")
-            stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
-            if stats_ext:
-                st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                # Arrondi à 2 décimales ici aussi
-                st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
-                forme_ext = get_team_last_games(NHL_TEAMS[equipe_ext])
-                st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_ext]))
+        
+        if ligue_id == "NHL":
+            # --- MODE NHL (API) ---
+            default_home = 0
+            default_away = 1
+            if 'target_dom' in st.session_state:
+                default_home = list(NHL_TEAMS.keys()).index(st.session_state.target_dom)
+                del st.session_state.target_dom
+            if 'target_ext' in st.session_state:
+                default_away = list(NHL_TEAMS.keys()).index(st.session_state.target_ext)
+                del st.session_state.target_ext
+
+            with col1:
+                equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), index=default_home)
+                stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
+                if stats_dom:
+                    st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
+                    st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
+                    forme = get_team_last_games(NHL_TEAMS[equipe_dom])
+                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
+            with col2:
+                equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), index=default_away)
+                stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
+                if stats_ext:
+                    st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
+                    st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
+                    forme = get_team_last_games(NHL_TEAMS[equipe_ext])
+                    st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
+
+        elif ligue_id == "SHL":
+            # --- MODE SHL (Manuel) ---
+            with col1:
+                equipe_dom = st.selectbox("🏠 Équipe Domicile", list(SHL_TEAMS.keys()))
+                st.info("Saisie manuelle des stats (pas d'API gratuite)")
+                att_dom = st.number_input("Attaque (buts/match)", value=SHL_TEAMS[equipe_dom]["attaque"], step=0.1)
+                def_dom = st.number_input("Défense (encaissés/match)", value=SHL_TEAMS[equipe_dom]["defense"], step=0.1)
+            with col2:
+                equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(SHL_TEAMS.keys()), index=1)
+                st.info("Saisie manuelle des stats")
+                att_ext = st.number_input("Attaque (buts/match)", value=SHL_TEAMS[equipe_ext]["attaque"], step=0.1)
+                def_ext = st.number_input("Défense (encaissés/match)", value=SHL_TEAMS[equipe_ext]["defense"], step=0.1)
+            stats_dom = {"attaque": att_dom, "defense": def_dom}
+            stats_ext = {"attaque": att_ext, "defense": def_ext}
+
+        elif ligue_id == "LIIGA":
+            # --- MODE LIIGA (Manuel) ---
+            with col1:
+                equipe_dom = st.selectbox("🏠 Équipe Domicile", list(LIIGA_TEAMS.keys()))
+                st.info("Saisie manuelle des stats")
+                att_dom = st.number_input("Attaque (buts/match)", value=LIIGA_TEAMS[equipe_dom]["attaque"], step=0.1)
+                def_dom = st.number_input("Défense (encaissés/match)", value=LIIGA_TEAMS[equipe_dom]["defense"], step=0.1)
+            with col2:
+                equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(LIIGA_TEAMS.keys()), index=1)
+                st.info("Saisie manuelle des stats")
+                att_ext = st.number_input("Attaque (buts/match)", value=LIIGA_TEAMS[equipe_ext]["attaque"], step=0.1)
+                def_ext = st.number_input("Défense (encaissés/match)", value=LIIGA_TEAMS[equipe_ext]["defense"], step=0.1)
+            stats_dom = {"attaque": att_dom, "defense": def_dom}
+            stats_ext = {"attaque": att_ext, "defense": def_ext}
 
         st.divider()
-        
         st.subheader("💰 Cotes (Optionnel)")
         c1, c2, c3 = st.columns(3)
         cote_dom = c1.number_input("1 (Dom)", min_value=1.01, value=None, step=0.01)
@@ -162,9 +186,9 @@ elif navigation == "🔍 Analyse Manuelle":
             st.dataframe(df_matrix, use_container_width=True)
             
             if cote_dom and (probs['1X2'][0] * cote_dom) - 1 > 0:
-                st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_dom} ! (Proba: {probs['1X2'][0]*100:.1f}%, Cote: {cote_dom})")
+                st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_dom} !")
             if cote_ext and (probs['1X2'][2] * cote_ext) - 1 > 0:
-                st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_ext} ! (Proba: {probs['1X2'][2]*100:.1f}%, Cote: {cote_ext})")
+                st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_ext} !")
 
 # ==========================================
 # PAGE 3 : HISTORIQUE & BANKROLL
