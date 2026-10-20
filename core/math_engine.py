@@ -5,6 +5,17 @@ def poisson_probability(k, lam):
         return 1.0 if k == 0 else 0.0
     return (math.exp(-lam) * (lam ** k)) / math.factorial(k)
 
+def get_goal_matrix(lambda_home, lambda_away, max_goals=5):
+    """Génère une matrice des scores possibles (de 0-0 à 5-5)."""
+    matrix = []
+    for h in range(max_goals + 1):
+        row = []
+        for a in range(max_goals + 1):
+            prob = poisson_probability(h, lambda_home) * poisson_probability(a, lambda_away)
+            row.append(prob * 100) # En pourcentage
+        matrix.append(row)
+    return matrix
+
 def calculate_all_markets(lambda_home, lambda_away, max_goals=8):
     p_home_win = 0.0
     p_draw = 0.0
@@ -42,11 +53,9 @@ def calculate_all_markets(lambda_home, lambda_away, max_goals=8):
     }
 
 def get_naive_baseline(league_id):
-    """Retourne les probabilités dites 'naïves' basées sur la moyenne de la ligue."""
-    # Moyennes historiques (simplifiées pour l'exemple)
     if league_id == "NHL":
         return calculate_all_markets(3.1, 2.9)
     elif league_id == "SHL":
         return calculate_all_markets(2.8, 2.5)
-    else: # LIIGA
+    else:
         return calculate_all_markets(2.6, 2.4)
