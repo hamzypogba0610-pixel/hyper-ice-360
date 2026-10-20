@@ -23,16 +23,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. INITIALISATION DE LA MÉMOIRE (Doit être fait AVANT tout le reste) ---
+# --- 1. INITIALISATION DE LA MÉMOIRE ---
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
 
-# Choix par défaut
 if 'page_choice' not in st.session_state: st.session_state.page_choice = "🎯 Scanner Automatique"
 if 'team_dom' not in st.session_state: st.session_state.team_dom = list(NHL_TEAMS.keys())[0]
 if 'team_ext' not in st.session_state: st.session_state.team_ext = list(NHL_TEAMS.keys())[1]
 
-# --- 2. TRANSFERT DES CIBLES (Exécuté juste avant l'affichage) ---
+# --- 2. TRANSFERT DES CIBLES ---
 if 'target_dom' in st.session_state:
     st.session_state.team_dom = st.session_state.target_dom
     del st.session_state.target_dom
@@ -42,11 +41,9 @@ if 'target_ext' in st.session_state:
 
 # --- 3. LA FONCTION MAGIQUE (Callback) ---
 def switch_to_analysis(h_code, a_code):
-    """S'exécute AVANT le rechargement de la page."""
     st.session_state.page_choice = "🔍 Analyse Manuelle"
     st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == h_code][0]
     st.session_state.target_ext = [k for k, v in NHL_TEAMS.items() if v == a_code][0]
-
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
@@ -110,7 +107,6 @@ if navigation == "🎯 Scanner Automatique":
                                 cote_juste = 1 / p['proba']
                                 st.caption(f"Cote juste : {cote_juste:.2f}")
                             with colC:
-                                # ON UTILISE LE CALLBACK ICI
                                 st.button(
                                     "Analyser", 
                                     key=f"btn_{p['match']}_{p['marche']}",
@@ -130,7 +126,8 @@ elif navigation == "🔍 Analyse Manuelle":
             stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
             if stats_dom:
                 st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                st.caption(f"⚔️ {stats_dom['attaque']} buts/match | 🛡️ {stats_dom['defense']} encaissés")
+                # Arrondi à 2 décimales ici
+                st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
                 forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
                 st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom]))
         with col2:
@@ -138,7 +135,8 @@ elif navigation == "🔍 Analyse Manuelle":
             stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
             if stats_ext:
                 st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                st.caption(f"⚔️ {stats_ext['attaque']} buts/match | 🛡️ {stats_ext['defense']} encaissés")
+                # Arrondi à 2 décimales ici aussi
+                st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
                 forme_ext = get_team_last_games(NHL_TEAMS[equipe_ext])
                 st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_ext]))
 
