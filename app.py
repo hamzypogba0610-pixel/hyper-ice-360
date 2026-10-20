@@ -67,12 +67,23 @@ with st.container():
     with col_stat_dom:
         st.caption(f"Stats de l'équipe Domicile")
         xg_dom = st.number_input("xG (Buts attendus)", value=None, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
-        tirs_dom = st.number_input("Tirs au but", value=None, step=1, key="tirs_dom", placeholder="Ex: 30")
         
     with col_stat_ext:
         st.caption(f"Stats de l'équipe Extérieur")
         xg_ext = st.number_input("xG (Buts attendus)", value=None, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
-        tirs_ext = st.number_input("Tirs au but", value=None, step=1, key="tirs_ext", placeholder="Ex: 25")
+
+    st.divider()
+
+    # Ligne 4 : Les Cotes du Bookmaker
+    st.subheader("💰 Cotes du Bookmaker (Optionnel)")
+    st.caption("Rentre les cotes pour voir si le modèle détecte une 'Value'.")
+    col_cote1, col_cote2, col_cote3 = st.columns(3)
+    with col_cote1:
+        cote_dom = st.number_input(f"Cote Victoire {equipe_dom if equipe_dom else 'Dom'}", min_value=1.01, value=None, step=0.01, key="cote_dom", placeholder="Ex: 2.10")
+    with col_cote2:
+        cote_nul = st.number_input("Cote Match Nul", min_value=1.01, value=None, step=0.01, key="cote_nul", placeholder="Ex: 4.20")
+    with col_cote3:
+        cote_ext = st.number_input(f"Cote Victoire {equipe_ext if equipe_ext else 'Ext'}", min_value=1.01, value=None, step=0.01, key="cote_ext", placeholder="Ex: 3.50")
 
     st.divider()
 
@@ -83,29 +94,58 @@ with st.container():
         nom_ext = equipe_ext if equipe_ext else "Équipe Extérieur"
 
         # --- 1. CALCUL DES PROBABILITÉS (MOTEUR) ---
-        st.subheader(f"🎯 Prédiction (Marché 1X2 à 60 min)")
+        st.subheader(f"🎯 Probabilités du Modèle (1X2 à 60 min)")
         
-        # Si pas de xG renseigné, on met une moyenne de ligue par défaut (ex: 3.0)
         lam_dom = xg_dom if xg_dom is not None else 3.0
         lam_ext = xg_ext if xg_ext is not None else 2.7
         
         st.write(f"*Basé sur des buts attendus (xG) de **{lam_dom}** pour {nom_dom} et **{lam_ext}** pour {nom_ext}.*")
         
-        # Appel du cerveau mathématique
         p_dom, p_nul, p_ext = calculate_1x2_proba(lam_dom, lam_ext)
         
-        # Affichage des probabilités
         prob1, prob2, prob3 = st.columns(3)
         prob1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
         prob2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
         prob3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
 
+        st.divider()
+
+        # --- 2. DETECTION DE VALEUR (EV & KELLY) ---
+        if cote_dom or cote_nul or cote_ext:
+            st.subheader("💎 Analyse de la Valeur (Value Bet)")
+            
+            # Fonction pour calculer l'EV et le Kelly
+            def calculer_valeur(proba, cote, nom_pari):
+                if cote is None or cote <= 1.0:
+                    return
+                
+                # EV = (Probabilité * Cote) - 1
+                ev = (proba * cote) - 1
+                
+                # Kelly fractionnaire (on utilise 0.25 pour être prudent)
+                kelly = ((proba * cote) - 1) / (cote - 1)
+                mise_conseillee = max(0.0, kelly * 0.25) * 100 # en % de la bankroll
+                
+                if ev > 0:
+                    st.success(f"✅ **{nom_pari}** : Valeur détectée ! (EV: +{ev*100:.1f}%)")
+                    if mise_conseillee > 0.5:
+                        st.info(f"👉 Mise conseillée (Kelly 1/4) : **{mise_conseillee:.1f}%** de ta bankroll.")
+                else:
+                    st.error(f"❌ **{nom_pari}** : Pas de valeur. (EV: {ev*100:.1f}%)")
+
+            if cote_dom:
+                calculer_valeur(p_dom, cote_dom, f"Victoire {nom_dom}")
+            if cote_nul:
+                calculer_valeur(p_nul, cote_nul, "Match Nul")
+            if cote_ext:
+                calculer_valeur(p_ext, cote_ext, f"Victoire {nom_ext}")
+
     st.divider()
 
-    # --- 2. SIMULATEUR DE POINTS (Optionnel, dans un menu fermé) ---
+    # --- 3. SIMULATEUR DE POINTS (Optionnel) ---
     with st.expander("🧮 Outil : Simulateur de points au classement (Optionnel)"):
+        # ... (le code du simulateur reste le même)
         st.caption("Remplis un score pour vérifier comment les points sont attribués dans cette ligue.")
-        
         col_sim1, col_sim2 = st.columns(2)
         with col_sim1:
             score_dom_60 = st.number_input("Buts Dom (60 min)", min_value=0, value=None, key="sim_dom_60", placeholder="0")
