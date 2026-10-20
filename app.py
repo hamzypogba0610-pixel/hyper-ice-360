@@ -9,7 +9,6 @@ import datetime
 
 st.set_page_config(page_title="HYPER-ICE 360", page_icon="🏒", layout="wide")
 
-# CSS
 st.markdown("""
     <style>
     .stApp { background-color: #0A192F; }
@@ -21,6 +20,8 @@ st.markdown("""
     .stSelectbox, .stNumberInput, .stTextInput { background-color: #112240; border-radius: 8px; }
     hr { border-color: #233554; }
     .team-logo { display: block; margin-left: auto; margin-right: auto; width: 80px; height: 80px; margin-bottom: 10px; }
+    .ev-positive { color: #64FFDA; font-weight: bold; font-size: 1.2em; }
+    .ev-negative { color: #FF6B6B; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -29,10 +30,10 @@ if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
 if 'page_choice' not in st.session_state: st.session_state.page_choice = "🎯 Scanner Automatique"
 
-# --- 2. MENU DE NAVIGATION ---
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
+# --- 2. MENU DE NAVIGATION ---
 navigation = st.radio(
     "Navigation",
     ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"],
@@ -47,8 +48,8 @@ st.divider()
 # PAGE 1 : SCANNER
 # ==========================================
 if navigation == "🎯 Scanner Automatique":
-    st.subheader("🎯 Chasseur de Pépites")
-    st.write("Le scanner analyse tous les matchs à venir (NHL uniquement pour l'instant) et filtre selon tes critères.")
+    st.subheader("🎯 Chasseur de Pépites & Cotes Réelles")
+    st.write("Le scanner analyse les matchs à venir et compare avec les cotes des bookmakers.")
     
     col_scan1, col_scan2 = st.columns(2)
     with col_scan1:
@@ -68,13 +69,14 @@ if navigation == "🎯 Scanner Automatique":
     if m_btts: markets_to_check.append("BTTS")
 
     if st.button("🚀 LANCER LE SCAN", type="primary"):
-        with st.spinner("Radar en cours... Analyse des données NHL..."):
+        with st.spinner("Radar en cours... Recherche des cotes en direct..."):
             upcoming = get_upcoming_games(horizon)
             if not upcoming:
                 st.warning("Aucun match trouvé sur cette période.")
             else:
                 pepites = scan_matches(upcoming, seuil, markets_to_check)
                 st.write(f"**{len(upcoming)} matchs scannés** | **{len(pepites)} pépites trouvées**")
+                
                 if len(pepites) == 0:
                     st.info("Aucun match ne passe ton seuil.")
                 else:
@@ -86,9 +88,14 @@ if navigation == "🎯 Scanner Automatique":
                                 st.caption(f"Marché : {p['marche']}")
                             with colB:
                                 st.metric(label="Probabilité", value=f"{p['proba']*100:.1f}%")
-                                st.caption(f"Cote juste : {1/p['proba']:.2f}")
+                                if p['cote'] > 0:
+                                    if p['ev'] > 0:
+                                        st.markdown(f"Cote : **{p['cote']}** | <span class='ev-positive'>EV: +{p['ev']*100:.1f}% 💎</span>", unsafe_allow_html=True)
+                                    else:
+                                        st.markdown(f"Cote : **{p['cote']}** | <span class='ev-negative'>EV: {p['ev']*100:.1f}%</span>", unsafe_allow_html=True)
+                                else:
+                                    st.caption(f"Cote juste : {1/p['proba']:.2f} (pas de cote book)")
                             with colC:
-                                # On stocke le match en mémoire pour l'analyse
                                 if st.button("Analyser", key=f"btn_{p['match']}_{p['marche']}"):
                                     st.session_state.page_choice = "🔍 Analyse Manuelle"
                                     st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == p["h_code"]][0]
@@ -100,15 +107,12 @@ if navigation == "🎯 Scanner Automatique":
 # PAGE 2 : ANALYSE MANUELLE
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
-    # 1. Choix de la ligue
     ligue_id = st.selectbox("🏆 Compétition", list(LEAGUES.keys()))
-    
     st.divider()
     with st.container():
         col1, col2 = st.columns(2)
         
         if ligue_id == "NHL":
-            # --- MODE NHL (API) ---
             default_home = 0
             default_away = 1
             if 'target_dom' in st.session_state:
@@ -136,30 +140,24 @@ elif navigation == "🔍 Analyse Manuelle":
                     st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
 
         elif ligue_id == "SHL":
-            # --- MODE SHL (Manuel) ---
             with col1:
                 equipe_dom = st.selectbox("🏠 Équipe Domicile", list(SHL_TEAMS.keys()))
-                st.info("Saisie manuelle des stats (pas d'API gratuite)")
                 att_dom = st.number_input("Attaque (buts/match)", value=SHL_TEAMS[equipe_dom]["attaque"], step=0.1)
                 def_dom = st.number_input("Défense (encaissés/match)", value=SHL_TEAMS[equipe_dom]["defense"], step=0.1)
             with col2:
                 equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(SHL_TEAMS.keys()), index=1)
-                st.info("Saisie manuelle des stats")
                 att_ext = st.number_input("Attaque (buts/match)", value=SHL_TEAMS[equipe_ext]["attaque"], step=0.1)
                 def_ext = st.number_input("Défense (encaissés/match)", value=SHL_TEAMS[equipe_ext]["defense"], step=0.1)
             stats_dom = {"attaque": att_dom, "defense": def_dom}
             stats_ext = {"attaque": att_ext, "defense": def_ext}
 
         elif ligue_id == "LIIGA":
-            # --- MODE LIIGA (Manuel) ---
             with col1:
                 equipe_dom = st.selectbox("🏠 Équipe Domicile", list(LIIGA_TEAMS.keys()))
-                st.info("Saisie manuelle des stats")
                 att_dom = st.number_input("Attaque (buts/match)", value=LIIGA_TEAMS[equipe_dom]["attaque"], step=0.1)
                 def_dom = st.number_input("Défense (encaissés/match)", value=LIIGA_TEAMS[equipe_dom]["defense"], step=0.1)
             with col2:
                 equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(LIIGA_TEAMS.keys()), index=1)
-                st.info("Saisie manuelle des stats")
                 att_ext = st.number_input("Attaque (buts/match)", value=LIIGA_TEAMS[equipe_ext]["attaque"], step=0.1)
                 def_ext = st.number_input("Défense (encaissés/match)", value=LIIGA_TEAMS[equipe_ext]["defense"], step=0.1)
             stats_dom = {"attaque": att_dom, "defense": def_dom}
