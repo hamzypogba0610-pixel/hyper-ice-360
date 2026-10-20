@@ -23,34 +23,42 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- INITIALISATION DE LA MÉMOIRE ---
+# --- 1. INITIALISATION DE LA MÉMOIRE (Doit être fait AVANT tout le reste) ---
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
 
-# Gestion de la navigation
-if 'current_page' not in st.session_state: 
-    st.session_state.current_page = "🎯 Scanner Automatique"
-if 'sel_dom' not in st.session_state: 
-    st.session_state.sel_dom = list(NHL_TEAMS.keys())[0]
-if 'sel_ext' not in st.session_state: 
-    st.session_state.sel_ext = list(NHL_TEAMS.keys())[1]
+# Choix par défaut
+if 'page_choice' not in st.session_state: st.session_state.page_choice = "🎯 Scanner Automatique"
+if 'team_dom' not in st.session_state: st.session_state.team_dom = list(NHL_TEAMS.keys())[0]
+if 'team_ext' not in st.session_state: st.session_state.team_ext = list(NHL_TEAMS.keys())[1]
+
+# --- 2. TRANSFERT DES CIBLES (Exécuté juste avant l'affichage) ---
+if 'target_dom' in st.session_state:
+    st.session_state.team_dom = st.session_state.target_dom
+    del st.session_state.target_dom
+if 'target_ext' in st.session_state:
+    st.session_state.team_ext = st.session_state.target_ext
+    del st.session_state.target_ext
+
+# --- 3. LA FONCTION MAGIQUE (Callback) ---
+def switch_to_analysis(h_code, a_code):
+    """S'exécute AVANT le rechargement de la page."""
+    st.session_state.page_choice = "🔍 Analyse Manuelle"
+    st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == h_code][0]
+    st.session_state.target_ext = [k for k, v in NHL_TEAMS.items() if v == a_code][0]
+
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- MENU DE NAVIGATION SÉCURISÉ ---
-nav_options = ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"]
+# --- 4. MENU DE NAVIGATION ---
 navigation = st.radio(
     "Navigation",
-    nav_options,
-    index=nav_options.index(st.session_state.current_page),
+    ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"],
+    key="page_choice",
     horizontal=True,
     label_visibility="collapsed"
 )
-
-# Si l'utilisateur clique manuellement sur le menu, on met à jour la mémoire
-if navigation != st.session_state.current_page:
-    st.session_state.current_page = navigation
 
 st.divider()
 
@@ -102,17 +110,13 @@ if navigation == "🎯 Scanner Automatique":
                                 cote_juste = 1 / p['proba']
                                 st.caption(f"Cote juste : {cote_juste:.2f}")
                             with colC:
-                                # LE BOUTON QUI FORCE LA NAVIGATION
-                                if st.button("Analyser", key=f"btn_{p['match']}_{p['marche']}"):
-                                    # 1. On change les équipes en mémoire
-                                    st.session_state.sel_dom = [k for k, v in NHL_TEAMS.items() if v == p["h_code"]][0]
-                                    st.session_state.sel_ext = [k for k, v in NHL_TEAMS.items() if v == p["a_code"]][0]
-                                    
-                                    # 2. On force le changement de page
-                                    st.session_state.current_page = "🔍 Analyse Manuelle"
-                                    
-                                    # 3. On relance le site pour appliquer les changements
-                                    st.rerun()
+                                # ON UTILISE LE CALLBACK ICI
+                                st.button(
+                                    "Analyser", 
+                                    key=f"btn_{p['match']}_{p['marche']}",
+                                    on_click=switch_to_analysis,
+                                    args=(p["h_code"], p["a_code"])
+                                )
                             st.divider()
 
 # ==========================================
@@ -122,7 +126,7 @@ elif navigation == "🔍 Analyse Manuelle":
     with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), key="sel_dom")
+            equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), key="team_dom")
             stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
             if stats_dom:
                 st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
@@ -130,7 +134,7 @@ elif navigation == "🔍 Analyse Manuelle":
                 forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
                 st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom]))
         with col2:
-            equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), key="sel_ext")
+            equipe_ext = st.selectbox("✈️ Équipe Extérieur", list(NHL_TEAMS.keys()), key="team_ext")
             stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
             if stats_ext:
                 st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
