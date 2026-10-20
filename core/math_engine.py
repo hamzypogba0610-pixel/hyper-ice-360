@@ -97,3 +97,12 @@ def get_naive_baseline(league_id):
         return calculate_all_markets(2.8, 2.5)
     else:
         return calculate_all_markets(2.6, 2.4)
+
+def calculate_clv(cote_ouverture, cote_fermeture):
+    """
+    Calcule le Closing Line Value (CLV).
+    Un CLV positif signifie que la cote de fermeture a baissé (le marché a validé ton analyse).
+    """
+    if cote_ouverture is None or cote_fermeture is None or cote_ouverture <= 0 or cote_fermeture <= 0:
+        return 0.0
+    return (cote_ouverture / cote_fermeture) - 1
