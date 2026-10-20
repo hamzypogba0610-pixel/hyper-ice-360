@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from core.leagues import LEAGUES, list_markets, compute_points
 from core.math_engine import calculate_all_markets, get_naive_baseline, get_goal_matrix
-from core.nhl_api import NHL_TEAMS, get_team_real_stats
+from core.nhl_api import NHL_TEAMS, get_team_real_stats, get_team_last_games
 import datetime
 
 st.set_page_config(page_title="HYPER-ICE 360", page_icon="🏒", layout="wide")
@@ -17,6 +17,9 @@ st.markdown("""
     .stButton>button:hover { background-color: transparent; color: #64FFDA; }
     .stSelectbox, .stNumberInput, .stTextInput { background-color: #112240; border-radius: 8px; }
     hr { border-color: #233554; }
+    
+    /* Style pour les logos */
+    .team-logo { display: block; margin-left: auto; margin-right: auto; width: 80px; height: 80px; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -56,15 +59,30 @@ with tab_analyse:
                 equipe_dom = st.selectbox("Équipe Domicile", list(NHL_TEAMS.keys()), key="sel_dom")
                 stats_dom = get_team_real_stats(NHL_TEAMS[equipe_dom])
                 if stats_dom:
+                    # Affichage du Logo
+                    st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
                     st.caption(f"⚔️ Attaque : {stats_dom['attaque']} buts/match")
                     st.caption(f"🛡️ Défense : {stats_dom['defense']} buts encaissés/match")
+                    
+                    # Forme récente (Le mini backtest visuel)
+                    forme_dom = get_team_last_games(NHL_TEAMS[equipe_dom])
+                    forme_str = " ".join(["🟢" if r == "V" else "🔴" for r in forme_dom])
+                    st.caption(f"Forme (5 derniers) : {forme_str}")
+
             with col_ext:
                 st.markdown("### ✈️ Extérieur")
                 equipe_ext = st.selectbox("Équipe Extérieur", list(NHL_TEAMS.keys()), index=1, key="sel_ext")
                 stats_ext = get_team_real_stats(NHL_TEAMS[equipe_ext])
                 if stats_ext:
+                    # Affichage du Logo
+                    st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
                     st.caption(f"⚔️ Attaque : {stats_ext['attaque']} buts/match")
                     st.caption(f"🛡️ Défense : {stats_ext['defense']} buts encaissés/match")
+                    
+                    # Forme récente
+                    forme_ext = get_team_last_games(NHL_TEAMS[equipe_ext])
+                    forme_str = " ".join(["🟢" if r == "V" else "🔴" for r in forme_ext])
+                    st.caption(f"Forme (5 derniers) : {forme_str}")
         else:
             with col_dom:
                 st.markdown("### 🏠 Domicile")
@@ -169,7 +187,6 @@ with tab_analyse:
             with c3:
                 st.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %", delta=f"{(p_ext - b_ext)*100:+.1f}% vs Naïf")
             
-            # --- AFFICHAGE DE LA MATRICE (SANS COULEUR) ---
             st.write("### 🎲 Matrice des Scores (Probabilités en %)")
             st.caption(f"Lignes = Buts {nom_dom} | Colonnes = Buts {nom_ext}")
             
@@ -178,7 +195,6 @@ with tab_analyse:
             df_matrix.index = [f"{i} buts" for i in range(6)]
             df_matrix.columns = [f"{i} buts" for i in range(6)]
             
-            # Affichage propre et simple
             st.dataframe(df_matrix.style.format("{:.2f}"), use_container_width=True)
 
             if best_ev > 0:
