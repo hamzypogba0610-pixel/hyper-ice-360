@@ -53,15 +53,15 @@ with tab_analyse:
                 equipe_dom = st.selectbox("Équipe Domicile", list(NHL_TEAMS.keys()), key="sel_dom")
                 stats_dom = get_team_real_stats(NHL_TEAMS[equipe_dom])
                 if stats_dom:
-                    xg_dom_auto = stats_dom["xg"]
-                    st.caption(f"Stats auto : {xg_dom_auto} buts/match (sur {stats_dom['matchs']} matchs)")
+                    st.caption(f"⚔️ Attaque : {stats_dom['attaque']} buts/match")
+                    st.caption(f"🛡️ Défense : {stats_dom['defense']} buts encaissés/match")
             with col_ext:
                 st.markdown("### ✈️ Extérieur")
                 equipe_ext = st.selectbox("Équipe Extérieur", list(NHL_TEAMS.keys()), index=1, key="sel_ext")
                 stats_ext = get_team_real_stats(NHL_TEAMS[equipe_ext])
                 if stats_ext:
-                    xg_ext_auto = stats_ext["xg"]
-                    st.caption(f"Stats auto : {xg_ext_auto} buts/match (sur {stats_ext['matchs']} matchs)")
+                    st.caption(f"⚔️ Attaque : {stats_ext['attaque']} buts/match")
+                    st.caption(f"🛡️ Défense : {stats_ext['defense']} buts encaissés/match")
         else:
             with col_dom:
                 st.markdown("### 🏠 Domicile")
@@ -72,13 +72,13 @@ with tab_analyse:
 
         st.divider()
 
-        st.subheader("📊 Statistiques (xG)")
-        st.caption("Si les données automatiques sont là, tu peux les modifier manuellement ici.")
+        # On laisse la possibilité de modifier manuellement (utile pour SHL/Liiga ou pour forcer un xG)
+        st.subheader("📊 Ajustement manuel (xG)")
         col_stat_dom, col_stat_ext = st.columns(2)
         with col_stat_dom:
-            xg_dom = st.number_input("xG Domicile", value=xg_dom_auto, step=0.1, key="xg_dom", placeholder="Ex: 2.5")
+            xg_dom = st.number_input("xG Domicile (Optionnel)", value=None, step=0.1, key="xg_dom", placeholder="Laisser vide pour l'auto")
         with col_stat_ext:
-            xg_ext = st.number_input("xG Extérieur", value=xg_ext_auto, step=0.1, key="xg_ext", placeholder="Ex: 1.8")
+            xg_ext = st.number_input("xG Extérieur (Optionnel)", value=None, step=0.1, key="xg_ext", placeholder="Laisser vide pour l'auto")
 
         st.divider()
 
@@ -107,8 +107,15 @@ with tab_analyse:
             nom_dom = equipe_dom if equipe_dom else "Domicile"
             nom_ext = equipe_ext if equipe_ext else "Extérieur"
             
-            lam_dom = xg_dom if xg_dom is not None else (xg_dom_auto if xg_dom_auto else 3.0)
-            lam_ext = xg_ext if xg_ext is not None else (xg_ext_auto if xg_ext_auto else 2.7)
+            # --- LA FORMULE MAGIQUE (Attaque x Défense) ---
+            if ligue_id == "NHL" and stats_dom and stats_ext and xg_dom is None:
+                # Avantage du terrain (Dom x1.05, Ext x0.95)
+                lam_dom = ((stats_dom['attaque'] + stats_ext['defense']) / 2) * 1.05
+                lam_ext = ((stats_ext['attaque'] + stats_dom['defense']) / 2) * 0.95
+            else:
+                # Si SHL/Liiga ou saisie manuelle
+                lam_dom = xg_dom if xg_dom is not None else 3.0
+                lam_ext = xg_ext if xg_ext is not None else 2.7
             
             probs = calculate_all_markets(lam_dom, lam_ext)
             base_probs = get_naive_baseline(ligue_id)
@@ -121,8 +128,8 @@ with tab_analyse:
                 "Date": str(date_match),
                 "Match": f"{nom_dom} vs {nom_ext}",
                 "Ligue": ligue_id,
-                "xG Dom": lam_dom,
-                "xG Ext": lam_ext,
+                "xG Dom": round(lam_dom, 2),
+                "xG Ext": round(lam_ext, 2),
                 "Proba 1": f"{p_dom*100:.1f} %",
                 "Proba X": f"{p_nul*100:.1f} %",
                 "Proba 2": f"{p_ext*100:.1f} %",
@@ -131,6 +138,7 @@ with tab_analyse:
             st.toast("Analyse sauvegardée !", icon="✅")
 
             st.subheader("🎯 Probabilités du Modèle")
+            st.caption(f"xG calculés : {nom_dom} = {lam_dom:.2f} | {nom_ext} = {lam_ext:.2f}")
             
             c1, c2, c3 = st.columns(3)
             with c1:
