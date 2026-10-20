@@ -3,10 +3,8 @@ from core.leagues import LEAGUES, list_markets, compute_points
 from core.math_engine import calculate_all_markets, get_naive_baseline
 import datetime
 
-# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="HYPER-ICE 360", page_icon="🏒", layout="wide")
 
-# --- DESIGN CSS (Couleurs Hockey) ---
 st.markdown("""
     <style>
     .stApp { background-color: #0A192F; }
@@ -57,7 +55,6 @@ with st.container():
     st.divider()
 
     st.subheader("💰 Cotes du Bookmaker (Optionnel)")
-    
     st.write("**1X2 (60 min)**")
     c1, c2, c3 = st.columns(3)
     cote_dom = c1.number_input("1 (Dom)", min_value=1.01, value=None, step=0.01, key="c_dom", placeholder="2.10")
@@ -86,9 +83,12 @@ with st.container():
         nom_dom = equipe_dom if equipe_dom else "Domicile"
         nom_ext = equipe_ext if equipe_ext else "Extérieur"
         
+        # Modèle perso (xG)
         lam_dom = xg_dom if xg_dom is not None else 3.0
         lam_ext = xg_ext if xg_ext is not None else 2.7
         probs = calculate_all_markets(lam_dom, lam_ext)
+        
+        # Modèle naïf (Baseline)
         base_probs = get_naive_baseline(ligue_id)
 
         p_dom, p_nul, p_ext = probs["1X2"]
