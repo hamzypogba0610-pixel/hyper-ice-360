@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from core.leagues import LEAGUES, list_markets, compute_points
-from core.math_engine import calculate_all_markets, get_naive_baseline, get_goal_matrix
+from core.math_engine import (calculate_all_markets, get_naive_baseline, get_goal_matrix, 
+                              calculate_brier_score, calculate_log_loss)
 from core.nhl_api import NHL_TEAMS, get_all_teams_stats, get_team_last_games, get_upcoming_games
 from core.europe_teams import SHL_TEAMS, LIIGA_TEAMS
 from core.scanner import scan_matches
@@ -40,12 +41,29 @@ if 'target_ext' in st.session_state:
     st.session_state.team_ext = st.session_state.target_ext
     del st.session_state.target_ext
 
-# --- 3. LA FONCTION MAGIQUE (Callback) ---
+# --- 3. FONCTIONS MAGIQUES (Callbacks) ---
 def switch_to_analysis(h_code, a_code):
     st.session_state.current_page = "🔍 Analyse Manuelle"
     st.session_state.target_dom = [k for k, v in NHL_TEAMS.items() if v == h_code][0]
     st.session_state.target_ext = [k for k, v in NHL_TEAMS.items() if v == a_code][0]
     st.rerun()
+
+def add_to_tracker(match, marche, proba, cote):
+    for p in st.session_state.historique:
+        if p["Match"] == match and p["Marche"] == marche:
+            st.toast("⚠️ Ce pari est déjà dans ton tracker !", icon="⚠️")
+            return
+    nouveau_pari = {
+        "Date": str(datetime.date.today()),
+        "Match": match,
+        "Marche": marche,
+        "Proba": round(proba * 100, 1),
+        "Cote": cote,
+        "Statut": "En attente",
+        "Gain_Net": 0.0
+    }
+    st.session_state.historique.append(nouveau_pari)
+    st.toast("✅ Pari ajouté au tracker !", icon="📌")
 
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
@@ -54,14 +72,7 @@ st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des ri
 pages = ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"]
 index_actuel = pages.index(st.session_state.current_page)
 
-choix_menu = st.radio(
-    "Navigation",
-    pages,
-    index=index_actuel,
-    horizontal=True,
-    label_visibility="collapsed"
-)
-
+choix_menu = st.radio("Navigation", pages, index=index_actuel, horizontal=True, label_visibility="collapsed")
 if choix_menu != st.session_state.current_page:
     st.session_state.current_page = choix_menu
     st.rerun()
@@ -74,7 +85,6 @@ st.divider()
 # ==========================================
 if navigation == "🎯 Scanner Automatique":
     st.subheader("🎯 Chasseur de Pépites & Cotes Réelles")
-    st.write("Le scanner analyse les matchs à venir et compare avec les cotes des bookmakers.")
     
     col_scan1, col_scan2 = st.columns(2)
     with col_scan1:
@@ -84,60 +94,41 @@ if navigation == "🎯 Scanner Automatique":
         st.write("Marchés à scanner :")
         m_1x2 = st.checkbox("1X2 (60 min)", value=True)
         m_final = st.checkbox("Vainqueur Final (OT/SO)", value=True)
-        m_over = st.checkbox("Over 5.5 buts", value=False)
-        m_btts = st.checkbox("BTTS (Oui)", value=False)
         
     markets_to_check = []
     if m_1x2: markets_to_check.append("1X2")
     if m_final: markets_to_check.append("Final")
-    if m_over: markets_to_check.append("Over")
-    if m_btts: markets_to_check.append("BTTS")
 
     if st.button("🚀 LANCER LE SCAN", type="primary"):
-        with st.spinner("Radar en cours... Recherche des cotes en direct..."):
+        with st.spinner("Radar en cours..."):
             upcoming = get_upcoming_games(horizon)
             if not upcoming:
-                st.warning("Aucun match trouvé sur cette période.")
+                st.warning("Aucun match trouvé.")
             else:
                 pepites = scan_matches(upcoming, seuil, markets_to_check)
                 st.write(f"**{len(upcoming)} matchs scannés** | **{len(pepites)} pépites trouvées**")
                 
-                if len(pepites) == 0:
-                    st.info("Aucun match ne passe ton seuil.")
-                else:
-                    for p in pepites:
-                        with st.container():
-                            colA, colB, colC = st.columns([3, 2, 1])
-                            with colA:
-                                st.write(f"**{p['match']}**")
-                                st.caption(f"Marché : {p['marche']}")
-                            with colB:
-                                st.metric(label="Probabilité", value=f"{p['proba']*100:.1f}%")
-                                if p['cote'] > 0:
-                                    if p['ev'] > 0:
-                                        st.markdown(f"Cote : **{p['cote']}** | <span class='ev-positive'>EV: +{p['ev']*100:.1f}% 💎</span>", unsafe_allow_html=True)
-                                    else:
-                                        st.markdown(f"Cote : **{p['cote']}** | <span class='ev-negative'>EV: {p['ev']*100:.1f}%</span>", unsafe_allow_html=True)
-                                    
-                                    # Affichage du CLV
-                                    if p['cote_ouv'] > 0 and p['cote_ouv'] != p['cote']:
-                                        if p['clv'] > 0:
-                                            st.markdown(f"<span class='clv-positive'>CLV: +{p['clv']*100:.1f}% (Ouv: {p['cote_ouv']}) 📈</span>", unsafe_allow_html=True)
-                                        else:
-                                            st.markdown(f"<span style='color:#8892B0'>CLV: {p['clv']*100:.1f}% (Ouv: {p['cote_ouv']}) 📉</span>", unsafe_allow_html=True)
-                                else:
-                                    st.caption(f"Cote juste : {1/p['proba']:.2f} (pas de cote book)")
-                            with colC:
-                                st.button(
-                                    "Analyser", 
-                                    key=f"btn_{p['match']}_{p['marche']}",
-                                    on_click=switch_to_analysis,
-                                    args=(p["h_code"], p["a_code"])
-                                )
-                            st.divider()
+                for p in pepites:
+                    with st.container():
+                        colA, colB, colC, colD = st.columns([3, 2, 1, 1])
+                        with colA:
+                            st.write(f"**{p['match']}**")
+                            st.caption(f"{p['marche']}")
+                        with colB:
+                            st.metric(label="Proba", value=f"{p['proba']*100:.1f}%")
+                            if p['cote'] > 0:
+                                st.markdown(f"Cote: **{p['cote']}** | EV: {p['ev']*100:+.1f}%")
+                        with colC:
+                            st.button("🔍", key=f"btn_ana_{p['match']}_{p['marche']}", 
+                                      on_click=switch_to_analysis, args=(p["h_code"], p["a_code"]), help="Analyser en détail")
+                        with colD:
+                            if p['cote'] > 0:
+                                st.button("📌", key=f"btn_sw_{p['match']}_{p['marche']}", 
+                                          on_click=add_to_tracker, args=(p['match'], p['marche'], p['proba'], p['cote']), help="Ajouter au tracker")
+                        st.divider()
 
 # ==========================================
-# PAGE 2 : ANALYSE MANUELLE (Inchangée)
+# PAGE 2 : ANALYSE MANUELLE
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
     ligue_id = st.selectbox("🏆 Compétition", list(LEAGUES.keys()))
@@ -153,7 +144,7 @@ elif navigation == "🔍 Analyse Manuelle":
                 stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
                 if stats_dom:
                     st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                    st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés (Rating: {stats_dom['rating']:.2f})")
+                    st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
                     forme = get_team_last_games(NHL_TEAMS[equipe_dom])
                     st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
             with col2:
@@ -161,7 +152,7 @@ elif navigation == "🔍 Analyse Manuelle":
                 stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
                 if stats_ext:
                     st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                    st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés (Rating: {stats_ext['rating']:.2f})")
+                    st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
                     forme = get_team_last_games(NHL_TEAMS[equipe_ext])
                     st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
 
@@ -215,13 +206,57 @@ elif navigation == "🔍 Analyse Manuelle":
                 st.success(f"💎 VALUE DÉTECTÉE sur Victoire {equipe_ext} !")
 
 # ==========================================
-# PAGE 3 : HISTORIQUE & BANKROLL
+# PAGE 3 : TRACKER & BANKROLL
 # ==========================================
 elif navigation == "📜 Tracker & Bankroll":
-    st.subheader("💰 Bankroll & Paris")
-    st.metric("Bankroll Actuelle", f"{st.session_state.bankroll:.2f} €")
+    st.subheader("📊 Tableau de Bord de Performance")
     
-    if len(st.session_state.historique) > 0:
-        st.dataframe(pd.DataFrame(st.session_state.historique), use_container_width=True)
+    brier = calculate_brier_score(st.session_state.historique)
+    logloss = calculate_log_loss(st.session_state.historique)
+    profit = st.session_state.bankroll - 1000.0
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💰 Bankroll", f"{st.session_state.bankroll:.2f} €", f"{profit:+.2f} €")
+    m2.metric("🎯 Brier Score", f"{brier:.3f}", help="Plus proche de 0 = Meilleur. (0.25 = Hasard)")
+    m3.metric("📉 Log-Loss", f"{logloss:.3f}", help="Plus bas = Mieux.")
+    
+    total_regles = len([p for p in st.session_state.historique if p["Statut"] in ["Gagné", "Perdu"]])
+    reussite = len([p for p in st.session_state.historique if p["Statut"] == "Gagné"]) / total_regles * 100 if total_regles > 0 else 0
+    m4.metric("🏆 Taux Réussite", f"{reussite:.1f} %")
+
+    st.divider()
+    
+    if len(st.session_state.historique) == 0:
+        st.info("Aucun pari. Utilise le Scanner pour en ajouter !")
     else:
-        st.info("L'historique est vide.")
+        df_hist = pd.DataFrame(st.session_state.historique)
+        st.dataframe(df_hist[["Date", "Match", "Marche", "Proba", "Cote", "Statut", "Gain_Net"]], use_container_width=True)
+
+        st.divider()
+        st.write("**Mettre à jour les résultats :**")
+        
+        matchs_en_attente = [i for i, m in enumerate(st.session_state.historique) if m["Statut"] == "En attente"]
+        
+        if matchs_en_attente:
+            choix = st.selectbox("Choisis le match à régler", matchs_en_attente, 
+                                 format_func=lambda x: f"{st.session_state.historique[x]['Match']} - {st.session_state.historique[x]['Marche']}")
+            
+            col_upd1, col_upd2 = st.columns(2)
+            with col_upd1:
+                if st.button("✅ GAGNÉ"):
+                    idx = choix
+                    cote = st.session_state.historique[idx]["Cote"]
+                    mise = 10.0 
+                    gain = mise * (cote - 1)
+                    st.session_state.historique[idx]["Statut"] = "Gagné"
+                    st.session_state.historique[idx]["Gain_Net"] = gain
+                    st.session_state.bankroll += gain
+                    st.rerun()
+            with col_upd2:
+                if st.button("❌ PERDU"):
+                    idx = choix
+                    mise = 10.0
+                    st.session_state.historique[idx]["Statut"] = "Perdu"
+                    st.session_state.historique[idx]["Gain_Net"] = -mise
+                    st.session_state.bankroll -= mise
+                    st.rerun()
