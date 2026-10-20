@@ -1,6 +1,5 @@
 import requests
 
-# Liste des 32 équipes de la NHL avec leur identifiant API
 NHL_TEAMS = {
     "Anaheim Ducks": "ANA", "Boston Bruins": "BOS", "Buffalo Sabres": "BUF",
     "Calgary Flames": "CGY", "Carolina Hurricanes": "CAR", "Chicago Blackhawks": "CHI",
@@ -16,10 +15,6 @@ NHL_TEAMS = {
 }
 
 def get_team_real_stats(team_code):
-    """
-    Va chercher les stats réelles de l'équipe sur l'API de la NHL.
-    Renvoie l'attaque (buts marqués) et la défense (buts encaissés).
-    """
     try:
         url = "https://api-web.nhle.com/v1/standings/now"
         response = requests.get(url, timeout=10)
@@ -31,7 +26,6 @@ def get_team_real_stats(team_code):
                 buts_marques = team.get("goalFor", 0)
                 buts_encaisses = team.get("goalAgainst", 0)
                 
-                # Calcul des moyennes par match
                 attaque = buts_marques / matchs_joues if matchs_joues > 0 else 3.0
                 defense = buts_encaisses / matchs_joues if matchs_joues > 0 else 3.0
                 
@@ -39,9 +33,41 @@ def get_team_real_stats(team_code):
                     "nom": team.get("teamName", {}).get("default", team_code),
                     "attaque": round(attaque, 2),
                     "defense": round(defense, 2),
-                    "matchs": matchs_joues
+                    "matchs": matchs_joues,
+                    "logo": f"https://assets.nhle.com/logos/nhl/svg/{team_code}_light.svg"
                 }
     except Exception as e:
-        print(f"Erreur API : {e}")
+        print(f"Erreur API Stats : {e}")
         return None
     return None
+
+def get_team_last_games(team_code, limit=5):
+    """Récupère les 5 derniers résultats de l'équipe (V = Victoire, D = Défaite)."""
+    try:
+        url = f"https://api-web.nhle.com/v1/club-schedule-season/{team_code}/now"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        
+        games = data.get("games", [])
+        # On filtre les matchs terminés
+        finished_games = [g for g in games if g.get("gameState") == "OFF"]
+        
+        # On prend les 5 derniers
+        last_5 = finished_games[-limit:]
+        results = []
+        
+        for g in last_5:
+            home_team = g.get("homeTeam", {}).get("abbrev")
+            away_team = g.get("awayTeam", {}).get("abbrev")
+            home_score = g.get("homeTeam", {}).get("score", 0)
+            away_score = g.get("awayTeam", {}).get("score", 0)
+            
+            if home_team == team_code:
+                results.append("V" if home_score > away_score else "D")
+            else:
+                results.append("V" if away_score > home_score else "D")
+                
+        return results
+    except Exception as e:
+        print(f"Erreur API Forme : {e}")
+        return []
