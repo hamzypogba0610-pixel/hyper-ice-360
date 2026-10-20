@@ -1,5 +1,6 @@
 import streamlit as st
 from core.leagues import LEAGUES, list_markets, compute_points
+from core.math_engine import calculate_1x2_proba
 import datetime
 
 # --- CONFIGURATION DE LA PAGE ---
@@ -45,7 +46,7 @@ with st.container():
 
     st.divider()
 
-    # Ligne 2 : Les Équipes (Vides par défaut)
+    # Ligne 2 : Les Équipes
     st.subheader("⚔️ Confrontation")
     col_dom, col_ext = st.columns(2)
     
@@ -59,7 +60,7 @@ with st.container():
 
     st.divider()
 
-    # Ligne 3 : Statistiques (Vides par défaut)
+    # Ligne 3 : Statistiques (xG)
     st.subheader("📊 Statistiques Avancées (Optionnel)")
     col_stat_dom, col_stat_ext = st.columns(2)
     
@@ -75,7 +76,7 @@ with st.container():
 
     st.divider()
 
-    # Ligne 4 : Le Simulateur (Vide par défaut)
+    # Ligne 4 : Le Simulateur
     st.subheader("🧮 Simulateur de points (Test du moteur)")
     st.caption("Vérifie comment les règles de la ligue s'appliquent.")
     
@@ -90,7 +91,7 @@ with st.container():
     # Bouton d'action
     if st.button("LANCER L'ANALYSE 🚀"):
         
-        # On remplace les champs vides par 0 pour éviter les erreurs
+        # Gestion des valeurs vides
         v_dom_60 = score_dom_60 if score_dom_60 is not None else 0
         v_dom_fin = score_dom_fin if score_dom_fin is not None else 0
         v_ext_60 = score_ext_60 if score_ext_60 is not None else 0
@@ -100,19 +101,38 @@ with st.container():
         nom_ext = equipe_ext if equipe_ext else "Équipe Extérieur"
 
         try:
-            # Calcul des points
+            # 1. Calcul des points (ce qu'on avait déjà)
             pts_dom, pts_ext = compute_points(
                 ligue_id, v_dom_60, v_ext_60, v_dom_fin, v_ext_fin
             )
             
             st.success(f"**Analyse terminée pour {nom_dom} vs {nom_ext} ({ligue.name})**")
             
-            # Affichage des résultats
             res1, res2 = st.columns(2)
             res1.metric(label=f"Points {nom_dom}", value=f"{pts_dom} pts")
             res2.metric(label=f"Points {nom_ext}", value=f"{pts_ext} pts")
             
             st.info(f"ℹ️ Règles appliquées : Système {ligue.points_system} | Format OT : {ligue.ot_format}")
+            
+            st.divider()
+
+            # 2. CALCUL DES PROBABILITÉS (NOUVEAU !)
+            st.subheader("🎯 Prédiction (Marché 1X2 à 60 min)")
+            
+            # Si l'utilisateur n'a pas mis de xG, on met une moyenne de ligue par défaut (ex: 3.0)
+            lam_dom = xg_dom if xg_dom is not None else 3.0
+            lam_ext = xg_ext if xg_ext is not None else 2.7
+            
+            st.write(f"*Basé sur des buts attendus (xG) de {lam_dom} pour {nom_dom} et {lam_ext} pour {nom_ext}.*")
+            
+            # Appel du cerveau mathématique
+            p_dom, p_nul, p_ext = calculate_1x2_proba(lam_dom, lam_ext)
+            
+            # Affichage des probabilités
+            prob1, prob2, prob3 = st.columns(3)
+            prob1.metric(label=f"Victoire {nom_dom}", value=f"{p_dom*100:.1f} %")
+            prob2.metric(label="Match Nul", value=f"{p_nul*100:.1f} %")
+            prob3.metric(label=f"Victoire {nom_ext}", value=f"{p_ext*100:.1f} %")
             
         except Exception as e:
             st.error(f"Erreur de calcul : {e}")
