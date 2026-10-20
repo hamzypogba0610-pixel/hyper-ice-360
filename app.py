@@ -22,6 +22,7 @@ st.markdown("""
     .team-logo { display: block; margin-left: auto; margin-right: auto; width: 80px; height: 80px; margin-bottom: 10px; }
     .ev-positive { color: #64FFDA; font-weight: bold; font-size: 1.2em; }
     .ev-negative { color: #FF6B6B; font-weight: bold; }
+    .clv-positive { color: #FFD700; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -29,6 +30,7 @@ st.markdown("""
 if 'historique' not in st.session_state: st.session_state.historique = []
 if 'bankroll' not in st.session_state: st.session_state.bankroll = 1000.0
 if 'current_page' not in st.session_state: st.session_state.current_page = "🎯 Scanner Automatique"
+if 'open_odds' not in st.session_state: st.session_state.open_odds = {}
 
 # --- 2. TRANSFERT DES CIBLES ---
 if 'target_dom' in st.session_state:
@@ -48,13 +50,10 @@ def switch_to_analysis(h_code, a_code):
 st.markdown('<p class="main-title">🏒 HYPER-ICE 360</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">Moteur d\'analyse prédictive & Gestion des risques</p>', unsafe_allow_html=True)
 
-# --- 4. MENU DE NAVIGATION (SANS KEY POUR NE PAS BLOQUER) ---
+# --- 4. MENU DE NAVIGATION ---
 pages = ["🎯 Scanner Automatique", "🔍 Analyse Manuelle", "📜 Tracker & Bankroll"]
-
-# On cherche l'index de la page actuelle
 index_actuel = pages.index(st.session_state.current_page)
 
-# On affiche le menu
 choix_menu = st.radio(
     "Navigation",
     pages,
@@ -63,7 +62,6 @@ choix_menu = st.radio(
     label_visibility="collapsed"
 )
 
-# Si l'utilisateur clique manuellement sur le menu, on met à jour la mémoire
 if choix_menu != st.session_state.current_page:
     st.session_state.current_page = choix_menu
     st.rerun()
@@ -120,6 +118,13 @@ if navigation == "🎯 Scanner Automatique":
                                         st.markdown(f"Cote : **{p['cote']}** | <span class='ev-positive'>EV: +{p['ev']*100:.1f}% 💎</span>", unsafe_allow_html=True)
                                     else:
                                         st.markdown(f"Cote : **{p['cote']}** | <span class='ev-negative'>EV: {p['ev']*100:.1f}%</span>", unsafe_allow_html=True)
+                                    
+                                    # Affichage du CLV
+                                    if p['cote_ouv'] > 0 and p['cote_ouv'] != p['cote']:
+                                        if p['clv'] > 0:
+                                            st.markdown(f"<span class='clv-positive'>CLV: +{p['clv']*100:.1f}% (Ouv: {p['cote_ouv']}) 📈</span>", unsafe_allow_html=True)
+                                        else:
+                                            st.markdown(f"<span style='color:#8892B0'>CLV: {p['clv']*100:.1f}% (Ouv: {p['cote_ouv']}) 📉</span>", unsafe_allow_html=True)
                                 else:
                                     st.caption(f"Cote juste : {1/p['proba']:.2f} (pas de cote book)")
                             with colC:
@@ -132,7 +137,7 @@ if navigation == "🎯 Scanner Automatique":
                             st.divider()
 
 # ==========================================
-# PAGE 2 : ANALYSE MANUELLE
+# PAGE 2 : ANALYSE MANUELLE (Inchangée)
 # ==========================================
 elif navigation == "🔍 Analyse Manuelle":
     ligue_id = st.selectbox("🏆 Compétition", list(LEAGUES.keys()))
@@ -141,16 +146,14 @@ elif navigation == "🔍 Analyse Manuelle":
         col1, col2 = st.columns(2)
         
         if ligue_id == "NHL":
-            # Valeurs par défaut
             default_home = 0
             default_away = 1
-
             with col1:
                 equipe_dom = st.selectbox("🏠 Équipe Domicile", list(NHL_TEAMS.keys()), index=default_home, key="team_dom")
                 stats_dom = get_all_teams_stats().get(NHL_TEAMS[equipe_dom])
                 if stats_dom:
                     st.markdown(f'<img src="{stats_dom["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                    st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés")
+                    st.caption(f"⚔️ {stats_dom['attaque']:.2f} buts/match | 🛡️ {stats_dom['defense']:.2f} encaissés (Rating: {stats_dom['rating']:.2f})")
                     forme = get_team_last_games(NHL_TEAMS[equipe_dom])
                     st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
             with col2:
@@ -158,7 +161,7 @@ elif navigation == "🔍 Analyse Manuelle":
                 stats_ext = get_all_teams_stats().get(NHL_TEAMS[equipe_ext])
                 if stats_ext:
                     st.markdown(f'<img src="{stats_ext["logo"]}" class="team-logo">', unsafe_allow_html=True)
-                    st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés")
+                    st.caption(f"⚔️ {stats_ext['attaque']:.2f} buts/match | 🛡️ {stats_ext['defense']:.2f} encaissés (Rating: {stats_ext['rating']:.2f})")
                     forme = get_team_last_games(NHL_TEAMS[equipe_ext])
                     st.caption("Forme : " + " ".join(["🟢" if r == "V" else "🔴" for r in forme]))
 
